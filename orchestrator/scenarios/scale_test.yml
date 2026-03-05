@@ -1,0 +1,36 @@
+name: scale_stress_test
+description: "Yüksek ajan sayısıyla kayıt doğrulama"
+version: "1.0"
+
+setup:
+  min_agents: 20
+  timeout_seconds: 120
+
+steps:
+  - name: check_ldap_count
+    action: check_ldap_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_xmpp_count
+    action: check_xmpp_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_first_agent
+    action: check_agent_exists
+    params:
+      agent_id: "ahenk-001"
+      check_ldap: true
+      check_xmpp: true
+
+  - name: collect_metrics
+    action: prometheus_snapshot
+    params:
+      metrics:
+        - ejabberd_connected_users_total
+        - jvm_memory_used_bytes
+        - http_server_requests_seconds_count
+
+assertions:
+  - type: all_steps_passed

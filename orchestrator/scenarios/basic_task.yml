@@ -1,0 +1,26 @@
+name: basic_echo_task
+description: "Temel API erişim ve ajan kayıt doğrulama"
+version: "1.0"
+
+setup:
+  wait_for_agents: false
+
+steps:
+  - name: api_health
+    action: check_api_health
+
+  - name: check_ldap_count
+    action: check_ldap_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_xmpp_count
+    action: check_xmpp_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_jwt_auth
+    action: check_jwt_auth
+
+assertions:
+  - type: all_steps_passed

@@ -1,0 +1,31 @@
+name: agent_registration_test
+description: "Provisioner doğrulama: LDAP + XMPP kayıtları eşleşiyor"
+version: "1.0"
+
+steps:
+  - name: check_ldap_count
+    action: check_ldap_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_xmpp_count
+    action: check_xmpp_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_first_agent
+    action: check_agent_exists
+    params:
+      agent_id: "ahenk-001"
+      check_ldap: true
+      check_xmpp: true
+
+  - name: check_last_agent
+    action: check_agent_exists
+    params:
+      agent_id: "ahenk-010"
+      check_ldap: true
+      check_xmpp: true
+
+assertions:
+  - type: all_steps_passed
