@@ -65,9 +65,15 @@ services:
   ejabberd:
     image: ejabberd/ecs:${EJABBERD_VERSION}
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/entrypoint-ejabberd.sh"]
     environment:
       XMPP_DOMAIN: ${XMPP_DOMAIN}
       EJABBERD_HOST: ${XMPP_HOST}
+      XMPP_ADMIN_USER: lider_sunucu
+      XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
+    volumes:
+      - ../services/ejabberd/ejabberd.yml:/home/ejabberd/conf/ejabberd.yml:ro
+      - ../services/ejabberd/entrypoint-ejabberd.sh:/entrypoint-ejabberd.sh:ro
     networks:
       - liderahenk_core
       - liderahenk_agents

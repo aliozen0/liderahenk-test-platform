@@ -1,0 +1,52 @@
+# compose/compose.agents.yml
+# LiderAhenk Test Ortamı — Oturum 3: Ajan Servisleri
+# compose.core.yml ile birlikte kullanılır
+
+services:
+  provisioner:
+    build:
+      context: ../services/provisioner
+      dockerfile: Dockerfile
+    depends_on:
+      ejabberd:
+        condition: service_healthy
+      ldap:
+        condition: service_healthy
+    networks:
+      - liderahenk_agents
+    environment:
+      AHENK_COUNT: ${AHENK_COUNT}
+      LDAP_HOST: ldap
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+      XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
+      EJABBERD_API: http://ejabberd:5280/api
+    restart: "no"
+
+  ahenk:
+    build:
+      context: ../services/ahenk
+      dockerfile: Dockerfile
+    depends_on:
+      provisioner:
+        condition: service_completed_successfully
+    networks:
+      - liderahenk_agents
+    environment:
+      XMPP_HOST: ejabberd
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+      LDAP_HOST: ldap
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      JITTER_MAX_SECONDS: ${JITTER_MAX_SECONDS}
+      AGENT_INDEX: 1
+    # PORT YAYIMLAMA YOK
+    # container_name YOK — ölçeklemeyi engeller
+
+networks:
+  liderahenk_agents:
+    external: true
+    name: liderahenk-test_liderahenk_agents
