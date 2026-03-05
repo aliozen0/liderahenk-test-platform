@@ -1,0 +1,4 @@
+pytest>=8.0
+pytest-timeout>=2.0
+ldap3>=2.9
+requests>=2.28

@@ -1,5 +1,5 @@
 # LiderAhenk Test Ortamı — Makefile
-# Oturum 1 + 2 + 3: Çekirdek Altyapı + Lider Servisleri + Ajanlar
+# Oturum 1 + 2 + 3 + 4: Çekirdek + Lider + Ajanlar + Sözleşme Testleri
 
 COMPOSE_CORE   = -f compose/compose.core.yml
 COMPOSE_LIDER  = -f compose/compose.lider.yml
@@ -10,7 +10,7 @@ PROJECT_NAME   = liderahenk-test
 # Varsayılan ölçekleme sayısı
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: dev-core dev-lider dev dev-scale build-lider build-agents stop clean clean-hard logs status
+.PHONY: dev-core dev-lider dev dev-scale build-lider build-agents stop clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp
 
 ## Çekirdek servisleri başlat (mariadb, ldap, ejabberd)
 dev-core:
@@ -80,3 +80,21 @@ logs:
 ## Docker compose durum kontrolü
 status:
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
+
+## Sözleşme testleri — tüm adapter'lar
+test-contract:
+	@echo "🧪 Sözleşme testleri koşturuluyor..."
+	pip install --break-system-packages -r requirements-test.txt -q
+	PYTHONPATH=. pytest contracts/ -v --timeout=30 --tb=short
+
+## Sadece REST sözleşme testleri
+test-contract-rest:
+	PYTHONPATH=. pytest contracts/test_rest_contract.py -v --timeout=30
+
+## Sadece LDAP sözleşme testleri
+test-contract-ldap:
+	PYTHONPATH=. pytest contracts/test_ldap_contract.py -v --timeout=30
+
+## Sadece XMPP sözleşme testleri
+test-contract-xmpp:
+	PYTHONPATH=. pytest contracts/test_xmpp_contract.py -v --timeout=30
