@@ -1,0 +1,90 @@
+# compose/compose.lider.yml
+# LiderAhenk Test Ortamı — Oturum 2: Lider Servisleri
+# compose.core.yml ile birlikte kullanılır
+
+services:
+  lider-core:
+    build:
+      context: ../services/lidercore
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      ldap:
+        condition: service_healthy
+      ejabberd:
+        condition: service_healthy
+    networks:
+      - liderahenk_core
+    environment:
+      DB_HOST: mariadb
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      LDAP_HOST: ldap
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_DN: "cn=${LDAP_ADMIN_USERNAME},${LDAP_ROOT}"
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      XMPP_HOST: ejabberd
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f karaf || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  liderapi:
+    build:
+      context: ../services/liderapi
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      lider-core:
+        condition: service_healthy
+    networks:
+      - liderahenk_core
+      - liderahenk_external
+    ports:
+      - "127.0.0.1:8082:8080"
+    environment:
+      DB_HOST: mariadb
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      LDAP_HOST: ldap
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      XMPP_HOST: ejabberd
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -so /dev/null http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+
+  lider-ui:
+    build:
+      context: ../services/liderui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - liderapi
+    networks:
+      - liderahenk_external
+    ports:
+      - "127.0.0.1:3001:80"
+    environment:
+      LIDER_API_URL: ${LIDER_API_URL}
+      LIDER_API_VERSION: ${LIDER_API_VERSION}
+
+networks:
+  liderahenk_core:
+    external: true
+    name: liderahenk-test_liderahenk_core
+  liderahenk_external:
+    external: true
+    name: liderahenk-test_liderahenk_external

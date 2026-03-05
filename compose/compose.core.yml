@@ -1,0 +1,87 @@
+# compose/compose.core.yml
+# LiderAhenk Test Ortamı — Oturum 1: Çekirdek Altyapı
+# container_name KULLANILMAZ — ölçeklemeyi engeller
+
+networks:
+  liderahenk_core:
+    driver: bridge
+    internal: true
+  liderahenk_agents:
+    driver: bridge
+  liderahenk_obs:
+    driver: bridge
+  liderahenk_external:
+    driver: bridge
+
+volumes:
+  mariadb_data:
+  ldap_data:
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ../services/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - liderahenk_core
+    # PORT YAYIMLAMA YOK — sadece iç ağdan erişim
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  ldap:
+    # bitnami/openldap artık Docker Hub'da mevcut değil (discontinue edildi)
+    # bitnamilegacy/openldap aynı env vars ve davranışı korur
+    image: bitnamilegacy/openldap:latest
+    restart: unless-stopped
+    environment:
+      LDAP_ROOT: ${LDAP_ROOT}
+      LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LDAP_PORT_NUMBER: ${LDAP_PORT}
+    volumes:
+      - ldap_data:/bitnami/openldap
+    networks:
+      - liderahenk_core
+      - liderahenk_agents
+    # PORT YAYIMLAMA YOK
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://localhost:${LDAP_PORT} -b ${LDAP_BASE_DN} -D cn=${LDAP_ADMIN_USERNAME},${LDAP_ROOT} -w ${LDAP_ADMIN_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  ejabberd:
+    image: ejabberd/ecs:${EJABBERD_VERSION}
+    restart: unless-stopped
+    environment:
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+      EJABBERD_HOST: ${XMPP_HOST}
+    networks:
+      - liderahenk_core
+      - liderahenk_agents
+      - liderahenk_obs
+      - liderahenk_external
+    # PORT YAYIMLAMA YOK — healthcheck için iç erişim yeterli
+    healthcheck:
+      test: ["CMD-SHELL", "/home/ejabberd/bin/ejabberdctl status || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    depends_on:
+      ldap:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
