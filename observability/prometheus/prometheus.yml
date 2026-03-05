@@ -1,0 +1,31 @@
+# Prometheus — LiderAhenk Test Ortamı
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: lider-core
+    static_configs:
+      - targets: ['lider-core:9779']
+    metrics_path: /metrics
+
+  - job_name: liderapi
+    static_configs:
+      - targets: ['liderapi:8080']
+    metrics_path: /actuator/prometheus
+
+  - job_name: ejabberd
+    static_configs:
+      - targets: ['ejabberd:5280']
+    metrics_path: /api/metrics
+
+  - job_name: mariadb
+    static_configs:
+      - targets: ['mysqld-exporter:9104']
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']

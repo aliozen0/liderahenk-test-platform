@@ -1,0 +1,48 @@
+# Prometheus Alert Rules — LiderAhenk SLO
+groups:
+  - name: liderahenk_slo
+    rules:
+      - alert: LiderApiDown
+        expr: up{job="liderapi"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "liderapi erişilemez"
+
+      - alert: LiderApiHighErrorRate
+        expr: |
+          rate(http_server_requests_seconds_count{status=~"5.."}[5m]) /
+          rate(http_server_requests_seconds_count[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "liderapi 5xx hata oranı %5 üzerinde"
+
+      - alert: TaskDeliveryLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_server_requests_seconds_bucket[5m])) > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Görev iletim gecikmesi p95 > 5sn"
+
+      - alert: LiderCoreDown
+        expr: up{job="lider-core"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "lider-core JMX exporter erişilemez"
+
+      - alert: ContainerHighMemory
+        expr: |
+          container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.90
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Konteyner bellek kullanımı %90 üzerinde"

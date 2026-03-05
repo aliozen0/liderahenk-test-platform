@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # ===========================================================
-# Provisioner — İdempotent Toplu Ajan Kaydı
+# Provisioner — İdempotent Toplu Ajan Kaydı + LDAP Şema Yükleme
 # ===========================================================
 # Bitnamilegacy OpenLDAP (port 1389) + ejabberd HTTP API uyumlu
-# AHENK_COUNT kadar ajan için LDAP + XMPP kaydı yapar.
+# 1. LiderAhenk LDAP şemasını yükle (pardusAccount, pardusLider)
+# 2. lider-admin kullanıcısını oluştur (JWT auth için)
+# 3. AHENK_COUNT kadar ajan için LDAP + XMPP kaydı yap
 
 import os
 import sys
 import time
+import subprocess
 import ldap3
 import requests
 
@@ -21,13 +24,42 @@ XMPP_PASS    = os.environ.get("XMPP_ADMIN_PASS", "secret")
 LDAP_HOST    = os.environ.get("LDAP_HOST", "ldap")
 LDAP_PORT    = int(os.environ.get("LDAP_PORT", "1389"))
 BASE_DN      = os.environ["LDAP_BASE_DN"]
-ADMIN_DN     = f"cn={os.environ['LDAP_ADMIN_USERNAME']},{BASE_DN}"
+ADMIN_USER   = os.environ["LDAP_ADMIN_USERNAME"]
+ADMIN_DN     = f"cn={ADMIN_USER},{BASE_DN}"
 ADMIN_PASS   = os.environ["LDAP_ADMIN_PASSWORD"]
 
 AHENK_OU_DN  = f"ou=Ahenkler,{BASE_DN}"
 
 MAX_RETRIES  = 30
 RETRY_WAIT   = 5
+
+# --- LiderAhenk LDAP Şeması ---
+# Kaynak: https://github.com/Pardus-LiderAhenk/lider-ahenk-installer/blob/master/src/conf/liderahenk.ldif
+LIDERAHENK_SCHEMA_DN = "cn=liderahenk,cn=schema,cn=config"
+LIDERAHENK_SCHEMA_ATTRS = {
+    "objectClass": ["olcSchemaConfig"],
+    "cn": "liderahenk",
+    "olcAttributeTypes": [
+        "( 2.4.2.42.1.9.7.9.0.9.7.2 NAME 'liderServiceAddress' SUP description SINGLE-VALUE )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.1 NAME 'liderPrivilege' SUP description )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.3 NAME 'liderDeviceObjectClassName' SUP objectClass SINGLE-VALUE )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.4 NAME 'liderUserObjectClassName' SUP objectClass SINGLE-VALUE )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.5 NAME 'liderUserIdentityAttributeName' SUP description SINGLE-VALUE )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.6 NAME 'liderAhenkOwnerAttributeName' SUP description SINGLE-VALUE )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.7 NAME 'liderDeviceOSType' SUP description )",
+        "( 2.4.2.42.1.9.7.9.0.9.7.8 NAME 'liderGroupType' SUP description )",
+    ],
+    "olcObjectClasses": [
+        "( 2.4.2.42.1.9.7.8.1.1.6.1 NAME 'pardusLiderAhenkConfig' STRUCTURAL MUST ( liderServiceAddress $ cn ) MAY ( liderAhenkOwnerAttributeName $ liderDeviceObjectClassName $ liderUserIdentityAttributeName $ liderUserObjectClassName ) )",
+        "( 2.4.2.42.1.9.7.8.1.1.6.4 NAME 'pardusAccount' AUXILIARY MUST ( uid $ userPassword ) )",
+        "( 2.4.2.42.1.9.7.8.1.1.6.3 NAME 'pardusDevice' AUXILIARY MUST ( cn $ uid $ userPassword $ owner ) MAY (liderDeviceOSType) )",
+        "( 2.4.2.42.1.9.7.8.1.1.6.2 NAME 'pardusLider' AUXILIARY MAY ( liderPrivilege $ liderGroupType ) )",
+    ],
+}
+
+# Admin kullanıcısı — JWT auth için
+LIDER_ADMIN_UID = os.environ.get("LIDER_ADMIN_UID", "lider-admin")
+LIDER_ADMIN_PASS = os.environ.get("LIDER_ADMIN_PASS", "secret")
 
 
 def wait_for_ldap():
@@ -70,6 +102,131 @@ def wait_for_ejabberd():
     raise RuntimeError("ejabberd API zaman aşımı — bağlantı kurulamadı")
 
 
+def load_ldap_schema():
+    """LiderAhenk LDAP şemasını yükle (idempotent).
+    cn=config backend'ine bağlanarak şemayı ekler.
+    Zaten varsa SKIP."""
+    print("[provisioner] LiderAhenk LDAP şeması yükleniyor...")
+
+    # cn=config'e EXTERNAL auth veya admin ile bağlan
+    # bitnamilegacy: slapd.d config backend, ldapi socket yok ama
+    # LDAP_PORT üzerinden cn=config erişimi admin DN ile mümkün olabilir
+    try:
+        # Yöntem 1: LDAP admin ile cn=config'e doğrudan ekleme dene
+        server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.ALL)
+        conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS,
+                                auto_bind=True)
+
+        # Şema zaten var mı kontrol et
+        conn.search("cn=schema,cn=config", "(cn=liderahenk)",
+                     search_scope=ldap3.LEVEL, attributes=["cn"])
+        if len(conn.entries) > 0:
+            print("[provisioner] ℹ️  LiderAhenk şeması zaten yüklü — SKIP")
+            conn.unbind()
+            return True
+
+        # Şemayı ekle
+        conn.add(LIDERAHENK_SCHEMA_DN, attributes=LIDERAHENK_SCHEMA_ATTRS)
+        if conn.result["result"] == 0:
+            print("[provisioner] ✅ LiderAhenk şeması yüklendi")
+            conn.unbind()
+            return True
+        elif conn.result["result"] == 68:  # already exists
+            print("[provisioner] ℹ️  LiderAhenk şeması zaten yüklü — SKIP")
+            conn.unbind()
+            return True
+        else:
+            print(f"[provisioner] ⚠️  Şema yükleme sonucu: {conn.result}")
+            conn.unbind()
+
+    except Exception as e:
+        print(f"[provisioner] ⚠️  Yöntem 1 başarısız: {e}")
+
+    # Yöntem 2: ldapadd komutu ile dene (container içinde)
+    try:
+        print("[provisioner] Yöntem 2: ldapadd ile şema yükleme deneniyor...")
+        schema_ldif = """dn: cn=liderahenk,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: liderahenk
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.2 NAME 'liderServiceAddress' SUP description SINGLE-VALUE )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.1 NAME 'liderPrivilege' SUP description )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.3 NAME 'liderDeviceObjectClassName' SUP objectClass SINGLE-VALUE )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.4 NAME 'liderUserObjectClassName' SUP objectClass SINGLE-VALUE )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.5 NAME 'liderUserIdentityAttributeName' SUP description SINGLE-VALUE )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.6 NAME 'liderAhenkOwnerAttributeName' SUP description SINGLE-VALUE )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.7 NAME 'liderDeviceOSType' SUP description )
+olcAttributeTypes: ( 2.4.2.42.1.9.7.9.0.9.7.8 NAME 'liderGroupType' SUP description )
+olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.1 NAME 'pardusLiderAhenkConfig' STRUCTURAL MUST ( liderServiceAddress $ cn ) MAY ( liderAhenkOwnerAttributeName $ liderDeviceObjectClassName $ liderUserIdentityAttributeName $ liderUserObjectClassName ) )
+olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.4 NAME 'pardusAccount' AUXILIARY MUST ( uid $ userPassword ) )
+olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.3 NAME 'pardusDevice' AUXILIARY MUST ( cn $ uid $ userPassword $ owner ) MAY (liderDeviceOSType) )
+olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.2 NAME 'pardusLider' AUXILIARY MAY ( liderPrivilege $ liderGroupType ) )
+"""
+        # Schema LDIF'i dosyaya yaz
+        with open("/tmp/liderahenk_schema.ldif", "w") as f:
+            f.write(schema_ldif)
+
+        # ldapadd çalıştır — provisioner container içinde
+        result = subprocess.run(
+            ["ldapadd", "-x", "-H", f"ldap://{LDAP_HOST}:{LDAP_PORT}",
+             "-D", ADMIN_DN, "-w", ADMIN_PASS,
+             "-f", "/tmp/liderahenk_schema.ldif"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            print("[provisioner] ✅ LiderAhenk şeması yüklendi (ldapadd)")
+            return True
+        elif "Already exists" in result.stderr:
+            print("[provisioner] ℹ️  LiderAhenk şeması zaten yüklü — SKIP")
+            return True
+        else:
+            print(f"[provisioner] ⚠️  ldapadd hatası: {result.stderr}")
+
+    except FileNotFoundError:
+        print("[provisioner] ℹ️  ldapadd komutu mevcut değil — atlanıyor")
+    except Exception as e:
+        print(f"[provisioner] ⚠️  Yöntem 2 başarısız: {e}")
+
+    print("[provisioner] ⚠️  Şema yüklenemedi — volume temizleyip tekrar deneyin: make clean && make dev")
+    return False
+
+
+def create_lider_admin_user():
+    """liderapi JWT auth için admin kullanıcısı oluştur (idempotent).
+    pardusAccount + pardusLider objectClass gerekli."""
+    admin_dn = f"uid={LIDER_ADMIN_UID},{BASE_DN}"
+    print(f"[provisioner] Admin kullanıcısı oluşturuluyor: {admin_dn}")
+
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.ALL)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        attrs = {
+            "objectClass": ["inetOrgPerson", "organizationalPerson",
+                            "person", "pardusAccount", "pardusLider", "top"],
+            "uid": LIDER_ADMIN_UID,
+            "cn": "Lider Admin",
+            "sn": "Admin",
+            "userPassword": LIDER_ADMIN_PASS,
+            "mail": "admin@liderahenk.org",
+            "liderPrivilege": ["ROLE_ADMIN", "ROLE_USER"],
+        }
+        conn.add(admin_dn, attributes=attrs)
+        if conn.result["result"] == 0:
+            print(f"[provisioner] ✅ Admin kullanıcısı oluşturuldu: {LIDER_ADMIN_UID}")
+            return True
+        elif conn.result["result"] == 68:  # entryAlreadyExists
+            print(f"[provisioner] ℹ️  Admin kullanıcısı zaten mevcut — SKIP")
+            return True
+        elif conn.result["result"] == 17:  # undefinedAttributeType
+            print(f"[provisioner] ⚠️  pardusAccount/pardusLider objectClass tanımsız — şema yüklenmedi mi?")
+            print(f"[provisioner]     Hata: {conn.result}")
+            return False
+        else:
+            print(f"[provisioner] ⚠️  Admin oluşturma hatası: {conn.result}")
+            return False
+    finally:
+        conn.unbind()
+
+
 def ensure_ou_ahenkler():
     """ou=Ahenkler OU'sunu oluştur (yoksa)."""
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
@@ -91,11 +248,7 @@ def register_xmpp_idempotent(username):
     try:
         resp = requests.post(
             f"{EJABBERD_API}/register",
-            json={
-                "user": username,
-                "host": XMPP_DOMAIN,
-                "password": XMPP_PASS,
-            },
+            json={"user": username, "host": XMPP_DOMAIN, "password": XMPP_PASS},
             timeout=10,
         )
         if resp.status_code == 200:
@@ -103,9 +256,7 @@ def register_xmpp_idempotent(username):
         elif resp.status_code == 409:
             return "EXISTS"
         else:
-            raise RuntimeError(
-                f"XMPP kayıt hatası: {username} → HTTP {resp.status_code}: {resp.text}"
-            )
+            raise RuntimeError(f"XMPP kayıt hatası: {username} → HTTP {resp.status_code}: {resp.text}")
     except requests.RequestException as e:
         raise RuntimeError(f"XMPP kayıt hatası: {username} → {e}")
 
@@ -118,10 +269,7 @@ def register_ldap_idempotent(index):
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
-        attrs = {
-            "objectClass": ["device"],
-            "cn": cn,
-        }
+        attrs = {"objectClass": ["device"], "cn": cn}
         conn.add(dn, attributes=attrs)
         if conn.result["result"] == 0:
             return "CREATED"
@@ -142,9 +290,7 @@ def verify_registrations():
         count = len(conn.entries)
         print(f"[provisioner] LDAP doğrulama: {count} kayıt bulundu (beklenen: {N})")
         if count < N:
-            raise RuntimeError(
-                f"Kayıt doğrulama başarısız: {count}/{N} kayıt"
-            )
+            raise RuntimeError(f"Kayıt doğrulama başarısız: {count}/{N} kayıt")
         return count
     finally:
         conn.unbind()
@@ -159,6 +305,14 @@ def main():
 
     wait_for_ldap()
     wait_for_ejabberd()
+
+    # Aşama 0: Şema yükleme + admin kullanıcısı
+    schema_ok = load_ldap_schema()
+    if schema_ok:
+        create_lider_admin_user()
+    else:
+        print("[provisioner] ⚠️  Şema yüklenemedi — admin kullanıcısı atlanıyor")
+
     ensure_ou_ahenkler()
 
     created_xmpp = 0

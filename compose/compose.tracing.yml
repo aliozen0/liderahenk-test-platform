@@ -1,0 +1,27 @@
+# compose/compose.tracing.yml
+# LiderAhenk Test Ortamı — Oturum 5: Distributed Tracing
+# compose.core.yml + compose.obs.yml ile birlikte kullanılır
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    networks:
+      - liderahenk_obs
+    ports:
+      - "127.0.0.1:16686:16686"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    restart: unless-stopped
+    volumes:
+      - ../observability/otel/otel-config.yml:/etc/otel/config.yaml:ro
+    networks:
+      - liderahenk_obs
+      - liderahenk_core
+      - liderahenk_agents
+    command: ["--config=/etc/otel/config.yaml"]
+    depends_on:
+      - jaeger

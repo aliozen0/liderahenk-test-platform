@@ -1,16 +1,18 @@
 # LiderAhenk Test Ortamı — Makefile
-# Oturum 1 + 2 + 3 + 4: Çekirdek + Lider + Ajanlar + Sözleşme Testleri
+# Oturum 1-5: Çekirdek + Lider + Ajanlar + Sözleşme + Gözlemlenebilirlik
 
-COMPOSE_CORE   = -f compose/compose.core.yml
-COMPOSE_LIDER  = -f compose/compose.lider.yml
-COMPOSE_AGENTS = -f compose/compose.agents.yml
-COMPOSE_CMD    = docker compose --env-file .env
-PROJECT_NAME   = liderahenk-test
+COMPOSE_CORE    = -f compose/compose.core.yml
+COMPOSE_LIDER   = -f compose/compose.lider.yml
+COMPOSE_AGENTS  = -f compose/compose.agents.yml
+COMPOSE_OBS     = -f compose/compose.obs.yml
+COMPOSE_TRACING = -f compose/compose.tracing.yml
+COMPOSE_CMD     = docker compose --env-file .env
+PROJECT_NAME    = liderahenk-test
 
 # Varsayılan ölçekleme sayısı
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: dev-core dev-lider dev dev-scale build-lider build-agents stop clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp
+.PHONY: dev-core dev-lider dev dev-scale dev-obs dev-full build-lider build-agents stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp
 
 ## Çekirdek servisleri başlat (mariadb, ldap, ejabberd)
 dev-core:
@@ -98,3 +100,24 @@ test-contract-ldap:
 ## Sadece XMPP sözleşme testleri
 test-contract-xmpp:
 	PYTHONPATH=. pytest contracts/test_xmpp_contract.py -v --timeout=30
+
+## Gözlemlenebilirlik stack'i ile başlat (core + lider + agent + obs)
+dev-obs:
+	@echo "📊 Gözlemlenebilirlik stack'i başlatılıyor..."
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d
+	@sleep 10
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) ps
+
+## Tam stack (core + lider + agent + obs + tracing)
+dev-full:
+	@echo "🚀 Tam stack başlatılıyor..."
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d
+	@sleep 10
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
+
+## Tüm servisleri durdur (obs + tracing dahil)
+stop-all:
+	@echo "🛑 Tüm servisler durduruluyor (obs + tracing dahil)..."
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) down 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) down 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) down

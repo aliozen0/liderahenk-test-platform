@@ -49,8 +49,10 @@ services:
       LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       LDAP_PORT_NUMBER: ${LDAP_PORT}
+      LDAP_CUSTOM_SCHEMA_DIR: /schemas
     volumes:
       - ldap_data:/bitnami/openldap
+      - ../services/ldap/schema:/schemas:ro
     networks:
       - liderahenk_core
       - liderahenk_agents
