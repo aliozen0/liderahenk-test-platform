@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 
 RUN git clone ${LIDER_GIT_URL} .
 
+# SSHA desteği ekleyen patch'ler — OpenLDAP bind uyumluluğu için
+COPY patches/CustomPasswordEncoder.java src/main/java/tr/org/lider/security/CustomPasswordEncoder.java
+COPY patches/Lider2Application.java src/main/java/tr/org/lider/Lider2Application.java
+
 RUN mvn clean package -DskipTests --no-transfer-progress
 
 # Stage 2: Runtime

@@ -190,11 +190,25 @@ olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.2 NAME 'pardusLider' AUXILIARY MAY ( 
     return False
 
 
+import hashlib
+import os
+
 def create_lider_admin_user():
     """liderapi JWT auth için admin kullanıcısı oluştur (idempotent).
-    pardusAccount + pardusLider objectClass gerekli."""
+    pardusAccount + pardusLider objectClass gerekli.
+    Şifre SSHA formatında hash'lenir — OpenLDAP bind uyumlu."""
     admin_dn = f"uid={LIDER_ADMIN_UID},{BASE_DN}"
     print(f"[provisioner] Admin kullanıcısı oluşturuluyor: {admin_dn}")
+
+    # SSHA hash oluşturma (OpenLDAP bind uyumlu)
+    try:
+        salt = os.urandom(8)
+        sha1_digest = hashlib.sha1(LIDER_ADMIN_PASS.encode("utf-8") + salt).digest()
+        import base64
+        ssha_hash = "{SSHA}" + base64.b64encode(sha1_digest + salt).decode("ascii")
+    except Exception as e:
+        print(f"[provisioner] ⚠️  Şifre hash'leme hatası: {e}")
+        return False
 
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.ALL)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
@@ -205,7 +219,7 @@ def create_lider_admin_user():
             "uid": LIDER_ADMIN_UID,
             "cn": "Lider Admin",
             "sn": "Admin",
-            "userPassword": LIDER_ADMIN_PASS,
+            "userPassword": ssha_hash,
             "mail": "admin@liderahenk.org",
             "liderPrivilege": ["ROLE_ADMIN", "ROLE_USER"],
         }
@@ -306,12 +320,9 @@ def main():
     wait_for_ldap()
     wait_for_ejabberd()
 
-    # Aşama 0: Şema yükleme + admin kullanıcısı
-    schema_ok = load_ldap_schema()
-    if schema_ok:
-        create_lider_admin_user()
-    else:
-        print("[provisioner] ⚠️  Şema yüklenemedi — admin kullanıcısı atlanıyor")
+    # Not: LDAP şeması ve admin kullanıcısı artık ldap-init servisi tarafından
+    # otomatik olarak yönetiliyor (compose.core.yml). Provisioner sadece
+    # ajan kaydı yapıyor.
 
     ensure_ou_ahenkler()
 

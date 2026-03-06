@@ -65,6 +65,28 @@ services:
       retries: 5
       start_period: 30s
 
+  # LDAP şema + admin kullanıcısı otomatik yükleyici
+  # ldapi:/// soketi ile root yetkili erişim (network_mode: service:ldap)
+  ldap-init:
+    image: python:3.12-slim
+    network_mode: "service:ldap"
+    entrypoint: ["/bin/bash", "/scripts/ldap-init.sh"]
+    restart: "no"
+    environment:
+      LDAP_HOST: localhost
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LIDER_ADMIN_UID: ${LIDER_USER:-lider-admin}
+      LIDER_ADMIN_PASS: ${LIDER_PASS:-secret}
+    volumes:
+      - ../services/ldap/ldap-init.sh:/scripts/ldap-init.sh:ro
+      - ../services/ldap/schema:/schemas:ro
+    depends_on:
+      ldap:
+        condition: service_healthy
+
   ejabberd:
     image: ejabberd/ecs:${EJABBERD_VERSION}
     restart: unless-stopped
