@@ -276,14 +276,21 @@ def register_xmpp_idempotent(username):
 
 
 def register_ldap_idempotent(index):
-    """LDAP device kaydı oluştur. entryAlreadyExists → SKIP."""
+    """LDAP pardusDevice+device kaydı oluştur. entryAlreadyExists → SKIP."""
     cn = f"ahenk-{index:03d}"
     dn = f"cn={cn},{AHENK_OU_DN}"
+    agent_id = cn  # ahenk-001, ahenk-002, ...
 
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
-        attrs = {"objectClass": ["device"], "cn": cn}
+        attrs = {
+            "objectClass": ["pardusDevice", "device"],
+            "cn": cn,
+            "uid": agent_id,
+            "userPassword": XMPP_PASS,
+            "owner": ADMIN_DN,
+        }
         conn.add(dn, attributes=attrs)
         if conn.result["result"] == 0:
             return "CREATED"

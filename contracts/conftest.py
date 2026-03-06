@@ -18,7 +18,8 @@ from adapters.ldap_schema_adapter import LdapSchemaAdapter
 
 # ── Yapılandırma (env veya varsayılan) ─────────────────────
 
-LIDER_API_URL = os.environ.get("LIDER_API_URL",    "http://localhost:8082")
+LIDER_API_URL = os.environ.get("LIDER_API_URL_EXTERNAL") \
+             or os.environ.get("LIDER_API_URL",    "http://localhost:8082")
 LIDER_USER    = os.environ.get("LIDER_API_USER",    "admin")
 LIDER_PASS    = os.environ.get("LIDER_API_PASS",    "DEGISTIR")
 EJABBERD_API  = os.environ.get("EJABBERD_API_URL",  "http://localhost:15280/api")
