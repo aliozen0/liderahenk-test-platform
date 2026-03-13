@@ -66,12 +66,16 @@ services:
     image: prom/mysqld-exporter:latest
     restart: unless-stopped
     environment:
-      DATA_SOURCE_NAME: "${MYSQL_USER}:${MYSQL_PASSWORD}@(mariadb:3306)/${MYSQL_DATABASE}"
+      MYSQLD_EXPORTER_PASSWORD: "${MYSQL_PASSWORD}"
+    command:
+      - --mysqld.address=mariadb:3306
+      - --mysqld.username=${MYSQL_USER}
     networks:
       - liderahenk_core
       - liderahenk_obs
     depends_on:
-      - mariadb
+      mariadb:
+        condition: service_healthy
 
 volumes:
   prometheus_data:
