@@ -2,14 +2,14 @@
   "annotations": { "list": [] },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
   "panels": [
     {
       "title": "Servis Durumu",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 0 },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
           "expr": "up{job=~\"cadvisor|ejabberd|lider-core|liderapi|mariadb\"}",
@@ -35,25 +35,46 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" }
     },
     {
-      "title": "liderapi CPU Kullanımı (cadvisor)",
+      "title": "Konteyner CPU Kullanımı",
+      "description": "Tüm konteynerlerin CPU kullanımı (konteyner başına toplam)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{name=~\".*liderapi.*\"}[1m])",
-          "legendFormat": "{{name}} CPU",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))",
+          "legendFormat": "{{name}}",
           "refId": "A"
         }
       ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["mean", "max"]
+        },
+        "tooltip": { "mode": "multi" }
+      },
       "datasource": { "type": "prometheus", "uid": "prometheus" }
     },
     {
-      "title": "Lider Konteyner Bellek Kullanımı (cadvisor)",
+      "title": "Konteyner Bellek Kullanımı",
+      "description": "Tüm konteynerlerin bellek kullanımı",
       "type": "gauge",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{name=~\".*lider.*\"}",
+          "expr": "container_memory_usage_bytes{name!=\"\"}",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -75,27 +96,117 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" }
     },
     {
-      "title": "Konteyner Başlama Zamanı (cadvisor)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "title": "ejabberd — Kayıtlı Kullanıcılar & Ajanlar",
+      "description": "ejabberd üzerindeki kayıtlı kullanıcı ve ahenk ajan sayısı",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 13 },
       "targets": [
         {
-          "expr": "container_start_time_seconds{name=~\".*lider.*\"}",
-          "legendFormat": "{{name}}",
+          "expr": "ejabberd_registered_users",
+          "legendFormat": "Toplam Kullanıcı",
           "refId": "A"
+        },
+        {
+          "expr": "ejabberd_ahenk_agents",
+          "legendFormat": "Ahenk Ajanları",
+          "refId": "B"
+        },
+        {
+          "expr": "ejabberd_connected_users",
+          "legendFormat": "Bağlı Kullanıcı",
+          "refId": "C"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "dateTimeAsIso",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Ahenk Ajanları" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "title": "JVM Heap Bellek — liderapi & lider-core",
+      "description": "JMX Exporter üzerinden JVM heap bellek kullanımı",
+      "type": "timeseries",
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 13 },
+      "targets": [
+        {
+          "expr": "jvm_memory_heap_used{job=\"liderapi\"}",
+          "legendFormat": "liderapi heap used",
+          "refId": "A"
+        },
+        {
+          "expr": "jvm_memory_heap_max{job=\"liderapi\"}",
+          "legendFormat": "liderapi heap max",
+          "refId": "B"
+        },
+        {
+          "expr": "jvm_memory_heap_used{job=\"lider-core\"}",
+          "legendFormat": "lider-core heap used",
+          "refId": "C"
+        },
+        {
+          "expr": "jvm_memory_heap_max{job=\"lider-core\"}",
+          "legendFormat": "lider-core heap max",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "title": "Konteyner Uptime",
+      "description": "Her konteyner ne kadar süredir çalışıyor",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 13 },
+      "targets": [
+        {
+          "expr": "time() - container_start_time_seconds{name=~\"liderahenk-test-(liderapi|lider-core|lider-ui|ejabberd|ldap|mariadb|ahenk)-.*\"}",
+          "legendFormat": "{{name}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 300 },
+              { "color": "green", "value": 3600 }
             ]
           }
         },
         "overrides": []
+      },
+      "options": {
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["last"] }
       },
       "datasource": { "type": "prometheus", "uid": "prometheus" }
     }
@@ -103,9 +214,9 @@
   "schemaVersion": 39,
   "tags": ["liderahenk", "slo"],
   "templating": { "list": [] },
-  "time": { "from": "now-1h", "to": "now" },
+  "time": { "from": "now-15m", "to": "now" },
   "timezone": "browser",
   "title": "LiderAhenk SLO Dashboard",
   "uid": "liderahenk-slo",
-  "version": 1
+  "version": 2
 }
