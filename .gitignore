@@ -39,3 +39,5 @@ target/
 *.tmp
 *.bak
 *.orig
+
+docs/

@@ -15,7 +15,7 @@ listen:
     ip: "::"
     module: ejabberd_c2s
     max_stanza_size: 262144
-    shaper: c2s_shaper
+    shaper: none
     access: c2s
     starttls: true
 
@@ -44,7 +44,15 @@ listen:
 
 # --- Kimlik Doğrulama ---
 auth_method: internal
-auth_password_format: scram
+auth_password_format: plain
+
+# Test ortamı: LiderAPI'nin (Smack 4.1.5) SCRAM-SHA-1 uyumsuzluğu
+# sebebiyle `not-authorized` hatası almasını önlemek için SCRAM kapatıldı.
+# (Smack PLAIN mekanizmasına fallback yapacak)
+auth_use_cache: false
+disable_sasl_mechanisms:
+  - SCRAM-SHA-1
+  - DIGEST-MD5
 
 # --- ACL ---
 acl:
@@ -130,7 +138,7 @@ modules:
   mod_client_state: {}
   mod_configure: {}
   mod_disco: {}
-  mod_fail2ban: {}
+  # mod_fail2ban: {}
   mod_http_api: {}
   mod_http_upload:
     put_url: https://@HOST@:5443/upload

@@ -28,7 +28,7 @@ ADMIN_USER   = os.environ["LDAP_ADMIN_USERNAME"]
 ADMIN_DN     = f"cn={ADMIN_USER},{BASE_DN}"
 ADMIN_PASS   = os.environ["LDAP_ADMIN_PASSWORD"]
 
-AHENK_OU_DN  = f"ou=Ahenkler,{BASE_DN}"
+AHENK_OU_DN  = os.environ.get("LDAP_AGENT_BASE_DN", f"ou=Ahenkler,{BASE_DN}")
 
 MAX_RETRIES  = 30
 RETRY_WAIT   = 5
@@ -48,12 +48,21 @@ LIDERAHENK_SCHEMA_ATTRS = {
         "( 2.4.2.42.1.9.7.9.0.9.7.6 NAME 'liderAhenkOwnerAttributeName' SUP description SINGLE-VALUE )",
         "( 2.4.2.42.1.9.7.9.0.9.7.7 NAME 'liderDeviceOSType' SUP description )",
         "( 2.4.2.42.1.9.7.9.0.9.7.8 NAME 'liderGroupType' SUP description )",
+        # sudo şeması — example-registration plugin sudoUser/sudoHost ile yetkilendirme yapar
+        "( 1.3.6.1.4.1.15953.9.1.1 NAME 'sudoUser' SUP name )",
+        "( 1.3.6.1.4.1.15953.9.1.2 NAME 'sudoHost' SUP name )",
+        "( 1.3.6.1.4.1.15953.9.1.3 NAME 'sudoCommand' SUP name )",
+        "( 1.3.6.1.4.1.15953.9.1.4 NAME 'sudoRunAs' SUP name )",
+        "( 1.3.6.1.4.1.15953.9.1.6 NAME 'sudoOption' SUP name )",
     ],
     "olcObjectClasses": [
         "( 2.4.2.42.1.9.7.8.1.1.6.1 NAME 'pardusLiderAhenkConfig' STRUCTURAL MUST ( liderServiceAddress $ cn ) MAY ( liderAhenkOwnerAttributeName $ liderDeviceObjectClassName $ liderUserIdentityAttributeName $ liderUserObjectClassName ) )",
         "( 2.4.2.42.1.9.7.8.1.1.6.4 NAME 'pardusAccount' AUXILIARY MUST ( uid $ userPassword ) )",
         "( 2.4.2.42.1.9.7.8.1.1.6.3 NAME 'pardusDevice' AUXILIARY MUST ( cn $ uid $ userPassword $ owner ) MAY (liderDeviceOSType) )",
         "( 2.4.2.42.1.9.7.8.1.1.6.2 NAME 'pardusLider' AUXILIARY MAY ( liderPrivilege $ liderGroupType ) )",
+        "( 2.4.2.42.1.9.7.8.1.1.6.5 NAME 'pardusDeviceGroup' AUXILIARY MAY ( liderGroupType ) )",
+        # sudo şeması
+        "( 1.3.6.1.4.1.15953.9.2.1 NAME 'sudoRole' SUP top STRUCTURAL MUST cn MAY ( sudoUser $ sudoHost $ sudoCommand $ sudoRunAs $ sudoOption $ description ) )",
     ],
 }
 
@@ -257,6 +266,82 @@ def ensure_ou_ahenkler():
         conn.unbind()
 
 
+def ensure_roles_ou():
+    """ou=Roles OU'sunu ve liderahenk rol grubunu oluştur.
+    example-registration plugin'i CSV'deki group sütununa göre
+    bu OU altında rol grubu arar."""
+    roles_dn = f"ou=Roles,{BASE_DN}"
+    role_group_dn = f"cn=liderahenk,{roles_dn}"
+
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        # 1. ou=Roles oluştur
+        conn.add(roles_dn, "organizationalUnit", {"ou": "Roles"})
+        if conn.result["result"] == 0:
+            print(f"[provisioner] ✅ OU oluşturuldu: {roles_dn}")
+        elif conn.result["result"] == 68:
+            print(f"[provisioner] ℹ️  OU zaten mevcut: {roles_dn}")
+        else:
+            print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+
+        # 2. liderahenk rol grubu oluştur
+        # example-registration plugin sudoUser attribute ile yetkilendirme yapar
+        # extensibleObject → herhangi bir attribute kullanmaya izin verir
+        sudo_users = [f"ahenk-{i:03d}" for i in range(1, N + 1)]
+        sudo_hosts = [f"ahenk-{i:03d}-host" for i in range(1, N + 1)]
+
+        attrs = {
+            "objectClass": ["organizationalRole", "extensibleObject", "top"],
+            "cn": "liderahenk",
+            "description": "LiderAhenk test agent role group",
+            "sudoUser": sudo_users,
+            "sudoHost": sudo_hosts,
+            "sudoCommand": ["ALL"],
+        }
+        conn.add(role_group_dn, attributes=attrs)
+        if conn.result["result"] == 0:
+            print(f"[provisioner] ✅ Rol grubu oluşturuldu: {role_group_dn} ({len(sudo_users)} üye)")
+        elif conn.result["result"] == 68:
+            print(f"[provisioner] ℹ️  Rol grubu zaten mevcut: {role_group_dn}")
+        else:
+            print(f"[provisioner] ⚠️  Rol grubu oluşturma sonucu: {conn.result}")
+        # 3. Domain Admin grubu oluştur (LiderCore example-registration plugin için)
+        # 3. Dedicated Registration Admin user in ou=Roles
+        reg_admin_dn = f"uid=lider-reg,{roles_dn}"
+        ssha_hash = "secret"
+            
+        attrs_reg = {
+            "objectClass": ["inetOrgPerson", "organizationalPerson", "person", "pardusAccount", "pardusLider", "top"],
+            "uid": "lider-reg",
+            "cn": "Registration Admin",
+            "sn": "Admin",
+            "userPassword": ssha_hash,
+            "mail": "reg@liderahenk.org",
+            "liderPrivilege": ["ROLE_DOMAIN_ADMIN"],
+        }
+        conn.add(reg_admin_dn, attributes=attrs_reg)
+
+        # 4. Domain Admin grubu oluştur (LiderCore example-registration plugin için)
+        admin_group_dn = f"cn=DomainAdmins,{roles_dn}"
+        attrs_admin = {
+            "objectClass": ["groupOfNames", "extensibleObject", "top"],
+            "cn": "DomainAdmins",
+            "member": [reg_admin_dn, f"uid={LIDER_ADMIN_UID},{BASE_DN}"],
+            "liderPrivilege": ["ROLE_DOMAIN_ADMIN"],
+        }
+        conn.add(admin_group_dn, attributes=attrs_admin)
+        if conn.result["result"] == 0:
+            print(f"[provisioner] ✅ Domain Admin grubu & Lider-Reg oluşturuldu")
+        elif conn.result["result"] == 68:
+            print(f"[provisioner] ℹ️  Domain Admin/Lider-Reg grubu zaten mevcut")
+        else:
+            print(f"[provisioner] ⚠️  Domain Admin oluşturma sonucu: {conn.result}")
+
+    finally:
+        conn.unbind()
+
+
 def register_xmpp_idempotent(username):
     """XMPP kullanıcısı kaydet. 409 → zaten var, SKIP."""
     try:
@@ -332,6 +417,7 @@ def main():
     # ajan kaydı yapıyor.
 
     ensure_ou_ahenkler()
+    ensure_roles_ou()
 
     created_xmpp = 0
     created_ldap = 0

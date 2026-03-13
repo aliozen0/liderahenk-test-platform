@@ -23,6 +23,8 @@ services:
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       XMPP_DOMAIN: ${XMPP_DOMAIN}
       XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
+      XMPP_AGENT_PASS: ${XMPP_AGENT_PASS}
+      LDAP_AGENT_BASE_DN: ${LDAP_AGENT_BASE_DN}
       EJABBERD_API: http://ejabberd:5280/api
     restart: "no"
 
@@ -38,11 +40,17 @@ services:
     environment:
       XMPP_HOST: ejabberd
       XMPP_DOMAIN: ${XMPP_DOMAIN}
+      XMPP_RESOURCE: ${XMPP_RESOURCE}
+      LIDER_USER: ${LIDER_ADMIN_UID:-lider-admin}
+      LIDER_PASS: ${LIDER_ADMIN_PASS:-secret}
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
       JITTER_MAX_SECONDS: ${JITTER_MAX_SECONDS}
-      AGENT_INDEX: 1
+      XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
+      XMPP_AGENT_PASS: ${XMPP_AGENT_PASS}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     # PORT YAYIMLAMA YOK
     # container_name YOK — ölçeklemeyi engeller
 

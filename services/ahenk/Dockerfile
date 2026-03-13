@@ -1,5 +1,7 @@
 # ===========================================================
 # Ahenk Agent — Multi-Stage Dockerfile
+# Birincil: GitHub'dan gerçek Ahenk kodunu çeker
+# Fallback: dummy_ahenk.py (raw XMPP client)
 # ===========================================================
 
 # --- Stage 1: Builder ---
@@ -11,14 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir uv
 
+# Fallback agent'ı builder'a kopyala (git clone başarısız olursa kullanılır)
+COPY dummy_ahenk.py /build/fallback/dummy_ahenk.py
+
 ARG AHENK_GIT_URL=https://github.com/Pardus-LiderAhenk/ahenk.git
 
 WORKDIR /build
-RUN git clone ${AHENK_GIT_URL} . || \
-    (echo "⚠️  Git clone başarısız — boş proje ile devam" && \
-     mkdir -p /build && \
-     echo "print('Ahenk placeholder — repo erişilemedi')" > /build/ahenk.py && \
-     echo "# no requirements" > /build/requirements.txt)
+RUN git clone --depth 1 ${AHENK_GIT_URL} . || \
+    (echo "⚠️  Git clone başarısız — fallback XMPP agent kullanılıyor" && \
+     cp /build/fallback/dummy_ahenk.py /build/ahenk.py && \
+     echo "slixmpp>=1.8.4" > /build/requirements.txt)
 
 # Python 3.12 uyumsuzluk durumunda hata vermesin
 RUN if [ -f requirements.txt ] && [ -s requirements.txt ]; then \
@@ -42,7 +46,5 @@ COPY --from=builder /build /app
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-USER ahenk
 
 ENTRYPOINT ["/entrypoint.sh"]

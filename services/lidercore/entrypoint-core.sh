@@ -49,17 +49,41 @@ if [ -f "$MAIN_CFG" ]; then
   sed -i "s|ldap.server = .*|ldap.server = ${LDAP_HOST:-ldap}|" "$MAIN_CFG"
   sed -i "s|ldap.port = .*|ldap.port = ${LDAP_PORT:-1389}|" "$MAIN_CFG"
   sed -i "s|ldap.username = .*|ldap.username = ${LDAP_ADMIN_DN:-cn=admin,dc=liderahenk,dc=org}|" "$MAIN_CFG"
-  sed -i "s|ldap.password = .*|ldap.password = ${LDAP_ADMIN_PASSWORD:-DEGISTIR}|" "$MAIN_CFG"
+  sed -i "s|ldap.password = .*|ldap.password = ${LDAP_ADMIN_PASSWORD:-REPLACE_WITH_LDAP_PASSWORD}|" "$MAIN_CFG"
   sed -i "s|ldap.root.dn = .*|ldap.root.dn = ${LDAP_BASE_DN:-dc=liderahenk,dc=org}|" "$MAIN_CFG"
 
   # XMPP
   sed -i "s|xmpp.host = .*|xmpp.host = ${XMPP_HOST:-ejabberd}|" "$MAIN_CFG"
   sed -i "s|xmpp.service.name = .*|xmpp.service.name = ${XMPP_DOMAIN:-liderahenk.org}|" "$MAIN_CFG"
+  sed -i "s|xmpp.resource = .*|xmpp.resource = ${XMPP_RESOURCE:-LiderAPI}|" "$MAIN_CFG"
 
   # Agent LDAP base DN
-  sed -i "s|agent.ldap.base.dn = .*|agent.ldap.base.dn = ou=Ahenkler,${LDAP_BASE_DN:-dc=liderahenk,dc=org}|" "$MAIN_CFG"
+  sed -i "s|agent.ldap.base.dn = .*|agent.ldap.base.dn = ${LDAP_AGENT_BASE_DN:-ou=Ahenkler,${LDAP_BASE_DN:-dc=liderahenk,dc=org}}|" "$MAIN_CFG"
   sed -i "s|user.ldap.base.dn = .*|user.ldap.base.dn = ${LDAP_BASE_DN:-dc=liderahenk,dc=org}|" "$MAIN_CFG"
   sed -i "s|user.ldap.roles.dn= .*|user.ldap.roles.dn= ou=Roles,${LDAP_BASE_DN:-dc=liderahenk,dc=org}|" "$MAIN_CFG"
+
+  # Test ortamı: agent kayıt yetkilendirmesini devre dışı bırak
+  sed -i "s|user.authorization.enabled = .*|user.authorization.enabled = false|" "$MAIN_CFG"
+
+  # ── Registration Plugin: records.csv'yi AHENK_COUNT'a göre dinamik üret ──
+  # Plugin kaldırılmaz — davranışı konfigürasyon ile değiştirilir (Open/Closed)
+  AHENK_COUNT=${AHENK_COUNT:-10}
+  CSV_PATH="/tmp/records.csv"
+  echo "  📋 records.csv oluşturuluyor (${AHENK_COUNT} agent)..."
+  rm -f "$CSV_PATH"
+  for i in $(seq 1 "$AHENK_COUNT"); do
+    ID=$(printf 'ahenk-%03d' "$i")
+    echo "${ID}-host,${ID},Test,LiderAhenk,TestLab,liderahenk" >> "$CSV_PATH"
+  done
+
+  # OSGi ConfigAdmin — plugin'e CSV yolunu göster (hot-reload destekli)
+  REG_CFG="${KARAF_HOME}/etc/tr.org.liderahenk.example.registration.cfg"
+  cat > "$REG_CFG" <<REGEOF
+# Dinamik olarak entrypoint tarafından üretildi
+file.protocol = local
+file.path = ${CSV_PATH}
+REGEOF
+  echo "  ✅ Registration plugin konfigüre edildi → ${CSV_PATH}"
 
   # Hot deployment path
   sed -i "s|hot.deployment.path=.*|hot.deployment.path=${KARAF_HOME}/deploy/|" "$MAIN_CFG"

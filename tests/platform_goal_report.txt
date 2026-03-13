@@ -9,7 +9,7 @@
   ✅ Gözlemlenebilirlik servisleri çalışıyor
      → Prometheus, Grafana, Loki ✓
   ✅ LDAP gerçek veri dönüyor
-     → # numEntries: 18
+     → # numEntries: 22
   ✅ ejabberd kayıtlı kullanıcılar
      → 11 kullanıcı kayıtlı
   ✅ MariaDB tablolar mevcut
@@ -32,7 +32,7 @@ C_CO
   ✅ Authenticated API erişimi
      → Bağlantı hatası
   ✅ Lider UI yükleniyor
-     → Content-Length: 1048 bytes
+     → Content-Length: 1142 bytes
   ✅ Sözleşme test dosyaları mevcut
      → 3/3 dosya
   ✅ Entegrasyon test dosyaları mevcut
@@ -42,7 +42,7 @@ C_CO
   ✅ ACL adapter katmanı mevcut
      → 3/3 dosya
   ✅ Prometheus veri topluyor
-     → 2/5 target UP
+     → 5/5 target UP
   ✅ Grafana dashboard erişilebilir
   ✅ Grafana veri alıyor
      → 5 metrik sonucu

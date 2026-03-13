@@ -20,8 +20,8 @@ from adapters.ldap_schema_adapter import LdapSchemaAdapter
 
 LIDER_API_URL = os.environ.get("LIDER_API_URL_EXTERNAL") \
              or os.environ.get("LIDER_API_URL",    "http://localhost:8082")
-LIDER_USER    = os.environ.get("LIDER_API_USER",    "admin")
-LIDER_PASS    = os.environ.get("LIDER_API_PASS",    "DEGISTIR")
+LIDER_USER    = os.environ.get("LIDER_API_USER",    "lider-admin")
+LIDER_PASS    = os.environ.get("LIDER_API_PASS",    "secret")
 EJABBERD_API  = os.environ.get("EJABBERD_API_URL",  "http://localhost:15280/api")
 XMPP_ADMIN    = os.environ.get("XMPP_ADMIN_USER",   "lider_sunucu")
 XMPP_PASS     = os.environ.get("XMPP_ADMIN_PASS",   "secret")

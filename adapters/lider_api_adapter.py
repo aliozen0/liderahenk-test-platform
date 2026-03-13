@@ -116,8 +116,46 @@ class LiderApiAdapter:
     # ── Endpoints ─────────────────────────────────────────────
 
     def get_agents(self) -> list[dict]:
-        """Kayıtlı ajanları döndür — GET /api/computers"""
-        r = self.session.get(self._api_url("computers"), timeout=10)
+        """Kayıtlı ajanları döndür — POST /api/lider/computer/computers"""
+        r = self.session.post(
+            f"{self.base_url}/api/lider/computer/computers",
+            json={},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, list):
+            return data
+        return data.get("content", data.get("entries", []))
+
+    def get_dashboard_info(self) -> dict:
+        """Dashboard bilgisi — POST /api/dashboard/info"""
+        r = self.session.post(
+            f"{self.base_url}/api/dashboard/info",
+            json={},
+            timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def get_agent_info_list(self, page: int = 1, size: int = 100) -> dict:
+        """Agent bilgi listesi — POST /api/lider/agent-info/list
+        Not: liderapi AgentDTO'da Optional field NPE bug'ı var.
+        Tüm query param'lar gönderilmeli."""
+        params = {
+            "pageNumber": page, "pageSize": size,
+            "agentStatus": "ALL", "status": "", "dn": "",
+            "hostname": "", "macAddress": "", "ipAddress": "",
+            "brand": "", "model": "", "processor": "",
+            "osVersion": "", "agentVersion": "", "diskType": "",
+            "selectedOUDN": "", "groupName": "", "groupDN": "",
+            "sessionReportType": "",
+        }
+        r = self.session.post(
+            f"{self.base_url}/api/lider/agent-info/list",
+            params=params,
+            timeout=10,
+        )
         r.raise_for_status()
         return r.json()
 

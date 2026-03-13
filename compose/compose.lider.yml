@@ -30,6 +30,9 @@ services:
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       XMPP_HOST: ejabberd
       XMPP_DOMAIN: ${XMPP_DOMAIN}
+      XMPP_RESOURCE: ${XMPP_RESOURCE}
+      LDAP_AGENT_BASE_DN: ${LDAP_AGENT_BASE_DN}
+      AHENK_COUNT: ${AHENK_COUNT}
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f karaf || exit 1"]
       interval: 15s
@@ -59,8 +62,11 @@ services:
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       XMPP_HOST: ejabberd
       XMPP_DOMAIN: ${XMPP_DOMAIN}
+      XMPP_RESOURCE: ${XMPP_RESOURCE}
     healthcheck:
       test: ["CMD-SHELL", "curl -so /dev/null http://localhost:8080/actuator/health || exit 1"]
       interval: 15s
