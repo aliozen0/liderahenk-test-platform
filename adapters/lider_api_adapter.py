@@ -128,15 +128,46 @@ class LiderApiAdapter:
             return data
         return data.get("content", data.get("entries", []))
 
-    def get_dashboard_info(self) -> dict:
+    def _auth_headers(self) -> dict[str, str]:
+        """Geçerli JWT varsa explicit auth header üret."""
+        if not self._token:
+            return {}
+        return {"Authorization": f"Bearer {self._token}"}
+
+    def get_dashboard_info(self) -> Optional[dict]:
         """Dashboard bilgisi — POST /api/dashboard/info"""
-        r = self.session.post(
-            f"{self.base_url}/api/dashboard/info",
-            json={},
-            timeout=10,
-        )
-        r.raise_for_status()
-        return r.json()
+        try:
+            r = self.session.post(
+                f"{self.base_url}/api/dashboard/info",
+                headers=self._auth_headers(),
+                json={},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                return r.json()
+            logger.warning("Dashboard info başarısız: HTTP %s", r.status_code)
+        except Exception as e:
+            logger.error("Dashboard info hatası: %s", e)
+        return None
+
+    def get_agent_list(self) -> list[dict]:
+        """Ajan listesini döner."""
+        try:
+            r = self.session.post(
+                f"{self.base_url}/api/lider/agent-info/list",
+                headers=self._auth_headers(),
+                json={"agentStatus": "ALL", "pageNumber": 1, "pageSize": 20},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                agents = data.get("content")
+                if agents is None and isinstance(data.get("agents"), dict):
+                    agents = data["agents"].get("content", [])
+                return agents if isinstance(agents, list) else []
+        except Exception as e:
+            logger.error("Agent list hatası: %s", e)
+        return []
 
     def get_agent_info_list(self, page: int = 1, size: int = 100) -> dict:
         """Agent bilgi listesi — POST /api/lider/agent-info/list
