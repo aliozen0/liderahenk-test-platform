@@ -14,13 +14,13 @@ scrape_configs:
 
   - job_name: liderapi
     static_configs:
-      - targets: ['liderapi:8080']
-    metrics_path: /actuator/prometheus
+      - targets: ['liderapi:9779']
+    metrics_path: /metrics
 
   - job_name: ejabberd
     static_configs:
-      - targets: ['ejabberd:5280']
-    metrics_path: /api/metrics
+      - targets: ['ejabberd-exporter:9780']
+    metrics_path: /metrics
 
   - job_name: mariadb
     static_configs:

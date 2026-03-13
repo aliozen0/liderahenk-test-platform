@@ -56,10 +56,14 @@ RUN apt-get update \
 RUN ls -la /opt/lider*/bin/ 2>/dev/null || echo "Lider kurulum dizini kontrol ediliyor..." \
     && dpkg -L lider-server | grep -E "bin|karaf" | head -10
 
+# JMX Prometheus Exporter
+COPY jmx_prometheus_javaagent.jar /opt/jmx_exporter.jar
+COPY jmx_config.yml /opt/jmx_config.yml
+
 # Entrypoint
 COPY entrypoint-core.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 8181
+EXPOSE 8181 9779
 
 ENTRYPOINT ["/entrypoint.sh"]

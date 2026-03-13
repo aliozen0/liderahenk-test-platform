@@ -77,6 +77,20 @@ services:
       mariadb:
         condition: service_healthy
 
+  ejabberd-exporter:
+    build:
+      context: ../services/ejabberd-exporter
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      EJABBERD_API: http://ejabberd:5280/api
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+      EXPORTER_PORT: "9780"
+    networks:
+      - liderahenk_obs
+    depends_on:
+      - prometheus
+
 volumes:
   prometheus_data:
   grafana_data:

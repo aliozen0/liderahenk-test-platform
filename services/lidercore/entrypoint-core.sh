@@ -82,5 +82,9 @@ mkdir -p "$(dirname "$KARAF_LOG")"
 
 echo "✅ Karaf başlatılıyor: ${KARAF_BIN} run"
 
+# JMX Prometheus Exporter — port 9779'da metrik sunma
+export EXTRA_JAVA_OPTS="-javaagent:/opt/jmx_exporter.jar=9779:/opt/jmx_config.yml"
+echo "📊 JMX Exporter port 9779'da aktif"
+
 # Karaf'ı foreground'da çalıştır
 exec "$KARAF_BIN" run
