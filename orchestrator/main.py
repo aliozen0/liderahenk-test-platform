@@ -60,6 +60,7 @@ class ScenarioRunner:
         )
 
         self.ahenk_count = int(os.environ.get("AHENK_COUNT", "10"))
+        self.state = {}
 
     def run(self, scenario_path: str) -> dict:
         """Senaryo dosyasını çalıştır."""
@@ -156,8 +157,64 @@ class ScenarioRunner:
                         "rate": rate}
 
             elif action == "send_task":
-                # liderapi endpoint'leri POST tabanlı - şimdilik stub
-                return {"success": True, "detail": "task gönderimi stub (POST endpoint gerekli)"}
+                command_id = params["command_id"]
+                parameter_map = params.get("parameter_map", {})
+                entry = self._select_agent_entry(params.get("agent_id"))
+                response = self.api.send_task(entry, command_id, parameter_map)
+                ok = response.status_code == 200
+                return {
+                    "success": ok,
+                    "detail": f"{command_id} -> HTTP {response.status_code}",
+                    "status_code": response.status_code,
+                }
+
+            elif action == "create_computer_group":
+                group_name = self._resolve_var(params["group_name"])
+                entry = self._select_agent_entry(params.get("agent_id"))
+                selected_ou_dn = params.get(
+                    "selected_ou_dn",
+                    f"ou=Agent,ou=Groups,{os.environ.get('LDAP_BASE_DN', 'dc=liderahenk,dc=org')}",
+                )
+                group = self.api.create_computer_group(group_name, [entry], selected_ou_dn)
+                self.state["last_group"] = group
+                return {
+                    "success": True,
+                    "detail": group.get("distinguishedName", group_name),
+                    "group": group,
+                }
+
+            elif action == "create_script_profile":
+                profile = self.api.create_script_profile(
+                    label=self._resolve_var(params["label"]),
+                    description=params.get("description", ""),
+                    script_contents=params.get("script_contents", "#!/bin/bash\nprintf 'ok\\n'"),
+                    script_type=int(params.get("script_type", 0)),
+                    script_params=params.get("script_params", ""),
+                )
+                self.state["last_profile"] = profile
+                return {"success": True, "detail": profile.get("label", "profile"), "profile": profile}
+
+            elif action == "create_policy":
+                profile = self.state.get("last_profile")
+                if not profile:
+                    return {"success": False, "detail": "Önce create_script_profile çalışmalı"}
+                policy = self.api.create_policy(
+                    label=self._resolve_var(params["label"]),
+                    description=params.get("description", ""),
+                    profiles=[profile],
+                    active=bool(params.get("active", False)),
+                )
+                self.state["last_policy"] = policy
+                return {"success": True, "detail": policy.get("label", "policy"), "policy": policy}
+
+            elif action == "execute_policy":
+                policy = self.state.get("last_policy")
+                group = self.state.get("last_group")
+                if not policy or not group:
+                    return {"success": False, "detail": "Önce create_policy ve create_computer_group çalışmalı"}
+                response = self.api.execute_policy(policy["id"], group["distinguishedName"], "GROUP")
+                ok = response.status_code == 200
+                return {"success": ok, "detail": f"policy -> HTTP {response.status_code}"}
 
             elif action == "wait_for_results":
                 timeout = params.get("timeout_seconds", 10)
@@ -188,3 +245,20 @@ class ScenarioRunner:
             else:
                 assertion_results.append({"type": t, "passed": True})
         return assertion_results
+
+    def _select_agent_entry(self, agent_id: str | None = None) -> dict:
+        tree = self.api.get_computer_tree()
+        entry = self._find_agent_entry(tree, agent_id)
+        if not entry:
+            raise RuntimeError(f"Ajan bulunamadı: {agent_id or 'first-online'}")
+        return entry
+
+    def _find_agent_entry(self, nodes, agent_id: str | None = None):
+        for node in nodes or []:
+            if node.get("type") in {"AHENK", "WINDOWS_AHENK"}:
+                if agent_id is None or node.get("uid") == agent_id or node.get("cn") == agent_id:
+                    return node
+            child = self._find_agent_entry(node.get("childEntries", []) or node.get("children", []), agent_id)
+            if child:
+                return child
+        return None

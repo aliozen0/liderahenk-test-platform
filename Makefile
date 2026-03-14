@@ -11,6 +11,7 @@ COMPOSE_OBS     = -f compose/compose.obs.yml
 COMPOSE_TRACING = -f compose/compose.tracing.yml
 COMPOSE_CMD     = docker compose --env-file .env
 PROJECT_NAME    = liderahenk-test
+PLAYWRIGHT_IMAGE ?= node:20-bookworm
 
 # Varsayılan ölçekleme sayısı
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
@@ -46,7 +47,7 @@ dev-lider:
 ## Tüm servisler (çekirdek + lider + agent)
 dev:
 	@echo "🚀 Tüm servisler başlatılıyor..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) up -d
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
 
@@ -89,7 +90,7 @@ status:
 ## Sözleşme testleri — tüm adapter'lar
 test-contract:
 	@echo "🧪 Sözleşme testleri koşturuluyor..."
-	pip install --break-system-packages -r requirements-test.txt -q
+	python3 -m pip install --break-system-packages -r requirements-test.txt -q
 	PYTHONPATH=. pytest contracts/ -v --timeout=30 --tb=short
 
 ## Sadece REST sözleşme testleri
@@ -107,14 +108,14 @@ test-contract-xmpp:
 ## Gözlemlenebilirlik stack'i ile başlat (core + lider + agent + obs)
 dev-obs:
 	@echo "📊 Gözlemlenebilirlik stack'i başlatılıyor..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) ps
 
 ## Tam stack (core + lider + agent + obs + tracing)
 dev-full:
 	@echo "🚀 Tam stack başlatılıyor..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
 
@@ -154,7 +155,7 @@ health:
 ## Entegrasyon testleri
 test-integration:
 	@echo "🧪 Entegrasyon testleri koşturuluyor..."
-	pip install --break-system-packages -r requirements-test.txt -q
+	python3 -m pip install --break-system-packages -r requirements-test.txt -q
 	PYTHONPATH=. pytest tests/test_integration.py -v --timeout=60
 
 ## Ölçek testleri
@@ -164,4 +165,5 @@ test-scale:
 
 ## Senaryo çalıştır (kullanım: make run-scenario S=registration_test.yml)
 run-scenario:
+	python3 -m pip install --break-system-packages -r requirements-test.txt -q
 	PYTHONPATH=. python3 orchestrator/cli.py --scenario orchestrator/scenarios/$(S)

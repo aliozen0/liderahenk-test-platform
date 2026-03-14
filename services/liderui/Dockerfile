@@ -20,6 +20,9 @@ RUN git clone ${LIDERUI_GIT_URL} .
 # dart-sass ile değiştir (drop-in replacement)
 RUN sed -i 's/"node-sass":.*/"sass": "^1.57.0",/' package.json 2>/dev/null || true
 
+COPY patches/ /tmp/ui-patches/
+RUN cp -a /tmp/ui-patches/. /app/
+
 RUN yarn install --network-timeout 300000
 
 RUN yarn build

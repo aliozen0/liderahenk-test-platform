@@ -202,7 +202,9 @@ public class LDAPServiceImpl implements ILDAPService {
 		LdapConnectionConfig lconfig = new LdapConnectionConfig();
 		lconfig.setLdapHost(configurationService.getLdapServer());
 		lconfig.setLdapPort(Integer.parseInt(configurationService.getLdapPort()));
-		if (AuthenticationService.isLogged()) {
+		boolean forceAdminBind = "v1-broad".equalsIgnoreCase(System.getenv("LIDER_FEATURE_PROFILE"))
+				|| "1".equals(System.getenv("LIDER_FORCE_LDAP_ADMIN_BIND"));
+		if (!forceAdminBind && AuthenticationService.isLogged()) {
 			User user = AuthenticationService.getUser();
 			if ( user != null && user.getPassword() != null && !user.getPassword().isEmpty()) {
 				lconfig.setName(user.getDn());
@@ -2798,4 +2800,3 @@ public class LDAPServiceImpl implements ILDAPService {
 	}
 } 
 	
-

@@ -21,6 +21,12 @@ COPY patches/LDAPServiceImpl.java src/main/java/tr/org/lider/ldap/LDAPServiceImp
 COPY patches/AgentDTO.java src/main/java/tr/org/lider/dto/AgentDTO.java
 COPY patches/AgentService.java src/main/java/tr/org/lider/services/AgentService.java
 COPY patches/AgentInfoCriteriaBuilder.java src/main/java/tr/org/lider/repositories/AgentInfoCriteriaBuilder.java
+COPY patches/ProfileImpl.java src/main/java/tr/org/lider/entities/ProfileImpl.java
+COPY patches/OperationLogImpl.java src/main/java/tr/org/lider/entities/OperationLogImpl.java
+COPY patches/CommandExecutionImpl.java src/main/java/tr/org/lider/entities/CommandExecutionImpl.java
+COPY patches/LiderCronJob.java src/main/java/tr/org/lider/LiderCronJob.java
+COPY patches/PluginService.java src/main/java/tr/org/lider/services/PluginService.java
+COPY patches/PluginTaskService.java src/main/java/tr/org/lider/services/PluginTaskService.java
 
 RUN mvn clean package -DskipTests --no-transfer-progress
 

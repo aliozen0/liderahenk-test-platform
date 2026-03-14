@@ -56,6 +56,7 @@ if [ -f "$MAIN_CFG" ]; then
   sed -i "s|xmpp.host = .*|xmpp.host = ${XMPP_HOST:-ejabberd}|" "$MAIN_CFG"
   sed -i "s|xmpp.service.name = .*|xmpp.service.name = ${XMPP_DOMAIN:-liderahenk.org}|" "$MAIN_CFG"
   sed -i "s|xmpp.resource = .*|xmpp.resource = ${XMPP_RESOURCE:-LiderAPI}|" "$MAIN_CFG"
+  sed -i "s|xmpp.password = .*|xmpp.password = ${XMPP_ADMIN_PASS:-secret}|" "$MAIN_CFG"
 
   # Agent LDAP base DN
   sed -i "s|agent.ldap.base.dn = .*|agent.ldap.base.dn = ${LDAP_AGENT_BASE_DN:-ou=Ahenkler,${LDAP_BASE_DN:-dc=liderahenk,dc=org}}|" "$MAIN_CFG"
@@ -65,25 +66,27 @@ if [ -f "$MAIN_CFG" ]; then
   # Test ortamı: agent kayıt yetkilendirmesini devre dışı bırak
   sed -i "s|user.authorization.enabled = .*|user.authorization.enabled = false|" "$MAIN_CFG"
 
-  # ── Registration Plugin: records.csv'yi AHENK_COUNT'a göre dinamik üret ──
-  # Plugin kaldırılmaz — davranışı konfigürasyon ile değiştirilir (Open/Closed)
-  AHENK_COUNT=${AHENK_COUNT:-10}
-  CSV_PATH="/tmp/records.csv"
-  echo "  📋 records.csv oluşturuluyor (${AHENK_COUNT} agent)..."
-  rm -f "$CSV_PATH"
-  for i in $(seq 1 "$AHENK_COUNT"); do
-    ID=$(printf 'ahenk-%03d' "$i")
-    echo "${ID}-host,${ID},Test,LiderAhenk,TestLab,liderahenk" >> "$CSV_PATH"
-  done
-
-  # OSGi ConfigAdmin — plugin'e CSV yolunu göster (hot-reload destekli)
   REG_CFG="${KARAF_HOME}/etc/tr.org.liderahenk.example.registration.cfg"
-  cat > "$REG_CFG" <<REGEOF
+  if [ "${ENABLE_LEGACY_REGISTRATION_SIM:-0}" = "1" ]; then
+    AHENK_COUNT=${AHENK_COUNT:-10}
+    CSV_PATH="/tmp/records.csv"
+    echo "  📋 legacy records.csv oluşturuluyor (${AHENK_COUNT} agent)..."
+    rm -f "$CSV_PATH"
+    for i in $(seq 1 "$AHENK_COUNT"); do
+      ID=$(printf 'ahenk-%03d' "$i")
+      echo "${ID}-host,${ID},Test,LiderAhenk,TestLab,liderahenk" >> "$CSV_PATH"
+    done
+
+    cat > "$REG_CFG" <<REGEOF
 # Dinamik olarak entrypoint tarafından üretildi
 file.protocol = local
 file.path = ${CSV_PATH}
 REGEOF
-  echo "  ✅ Registration plugin konfigüre edildi → ${CSV_PATH}"
+    echo "  ✅ Legacy registration sim aktif → ${CSV_PATH}"
+  else
+    rm -f /tmp/records.csv "$REG_CFG"
+    echo "  ✅ Legacy registration sim kapalı; registration owner liderapi"
+  fi
 
   # Hot deployment path
   sed -i "s|hot.deployment.path=.*|hot.deployment.path=${KARAF_HOME}/deploy/|" "$MAIN_CFG"

@@ -1,0 +1,34 @@
+name: policy_roundtrip
+description: "Script profile -> policy -> computer group -> execute akışı"
+version: "1.0"
+
+setup:
+  wait_for_agents: false
+
+steps:
+  - name: api_health
+    action: check_api_health
+
+  - name: create_group
+    action: create_computer_group
+    params:
+      group_name: "v1-script-group"
+
+  - name: create_profile
+    action: create_script_profile
+    params:
+      label: "v1-script-profile"
+      description: "V1 script profile"
+      script_contents: "#!/bin/bash\nprintf 'policy-roundtrip\\n'"
+
+  - name: create_policy
+    action: create_policy
+    params:
+      label: "v1-script-policy"
+      description: "V1 script policy"
+
+  - name: execute_policy
+    action: execute_policy
+
+assertions:
+  - type: all_steps_passed

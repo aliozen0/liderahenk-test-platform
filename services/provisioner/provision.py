@@ -18,7 +18,7 @@ import requests
 N            = int(os.environ["AHENK_COUNT"])
 XMPP_DOMAIN  = os.environ["XMPP_DOMAIN"]              # liderahenk.org
 EJABBERD_API = os.environ.get("EJABBERD_API", "http://ejabberd:5280/api")
-XMPP_PASS    = os.environ.get("XMPP_ADMIN_PASS", "secret")
+XMPP_PASS    = os.environ.get("XMPP_AGENT_PASS") or os.environ.get("XMPP_ADMIN_PASS", "secret")
 
 # bitnamilegacy: port 1389 (non-root default)
 LDAP_HOST    = os.environ.get("LDAP_HOST", "ldap")
@@ -29,6 +29,8 @@ ADMIN_DN     = f"cn={ADMIN_USER},{BASE_DN}"
 ADMIN_PASS   = os.environ["LDAP_ADMIN_PASSWORD"]
 
 AHENK_OU_DN  = os.environ.get("LDAP_AGENT_BASE_DN", f"ou=Ahenkler,{BASE_DN}")
+GROUPS_OU_DN = f"ou=Groups,{BASE_DN}"
+AGENT_GROUPS_OU_DN = f"ou=Agent,{GROUPS_OU_DN}"
 
 MAX_RETRIES  = 30
 RETRY_WAIT   = 5
@@ -342,6 +344,26 @@ def ensure_roles_ou():
         conn.unbind()
 
 
+def ensure_group_tree():
+    """UI computer-group ve policy akışı için gerekli LDAP ağacını oluştur."""
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        for dn, ou_value in (
+            (GROUPS_OU_DN, "Groups"),
+            (AGENT_GROUPS_OU_DN, "Agent"),
+        ):
+            conn.add(dn, "organizationalUnit", {"ou": ou_value})
+            if conn.result["result"] == 0:
+                print(f"[provisioner] ✅ OU oluşturuldu: {dn}")
+            elif conn.result["result"] == 68:
+                print(f"[provisioner] ℹ️  OU zaten mevcut: {dn}")
+            else:
+                print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+    finally:
+        conn.unbind()
+
+
 def register_xmpp_idempotent(username):
     """XMPP kullanıcısı kaydet. 409 → zaten var, SKIP."""
     try:
@@ -417,6 +439,7 @@ def main():
     # ajan kaydı yapıyor.
 
     ensure_ou_ahenkler()
+    ensure_group_tree()
     ensure_roles_ou()
 
     created_xmpp = 0

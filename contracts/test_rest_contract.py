@@ -1,98 +1,63 @@
-"""
-liderapi REST sözleşme testleri.
-───────────────────────────────────────────────
-Sözleşme: davranışı test eder, iş mantığını değil.
-Auth: JWT via POST /api/auth/signin (LDAP-backed)
-Port: 8082 (8080 Tomcat ile çakışıyordu)
-
-NOT: Authenticated endpoint testleri, LDAP'ta pardusAccount +
-pardusLider objectClass'ına sahip kullanıcı gerektiriyor.
-Bitnami default kullanıcıları (user01, user02) bu şemaya sahip değil.
-Auth-gerektiren testler skip ile işaretlenir.
-"""
-
-import pytest
 import requests
 
 BASE = "http://localhost:8082"
 
 
 class TestLiderApiHealth:
-    """liderapi erişilebilirlik testleri (auth gerektirmez)."""
-
     def test_liderapi_is_reachable(self):
-        """liderapi ayakta — 401 bile olsa uygulama çalışıyor."""
-        r = requests.get(f"{BASE}/actuator/health", timeout=5)
-        assert r.status_code in (200, 401), \
-            f"Uygulama yanıt vermiyor: HTTP {r.status_code}"
+        response = requests.get(f"{BASE}/actuator/health", timeout=5)
+        assert response.status_code in (200, 401), f"Uygulama yanıt vermiyor: HTTP {response.status_code}"
 
     def test_health_check_via_adapter(self, lider_api):
-        """Adapter health_check metodu çalışıyor."""
-        assert lider_api.health_check(), \
-            "liderapi health check başarısız"
+        assert lider_api.health_check(), "liderapi health check başarısız"
 
     def test_signin_endpoint_exists(self, lider_api):
-        """POST /api/auth/signin endpoint'i mevcut."""
-        assert lider_api.signin_endpoint_available(), \
-            "/api/auth/signin endpoint'i bulunamadı"
+        assert lider_api.signin_endpoint_available(), "/api/auth/signin endpoint'i bulunamadı"
 
 
 class TestLiderApiAuth:
-    """JWT auth mekanizması testleri."""
-
     def test_signin_rejects_empty_body(self):
-        """Boş body ile signin → 400/401 (404 değil)."""
-        r = requests.post(f"{BASE}/api/auth/signin",
-                          json={}, timeout=5)
-        assert r.status_code != 404, \
-            "POST /api/auth/signin endpoint'i bulunamadı (404)"
+        response = requests.post(f"{BASE}/api/auth/signin", json={}, timeout=5)
+        assert response.status_code != 404, "POST /api/auth/signin endpoint'i bulunamadı (404)"
 
     def test_signin_rejects_invalid_credentials(self):
-        """Geçersiz credentials → 401/500."""
-        r = requests.post(f"{BASE}/api/auth/signin",
-                          json={"username": "nonexistent",
-                                "password": "wrong"},
-                          timeout=5)
-        assert r.status_code in (401, 403, 500), \
-            f"Beklenmedik yanıt: HTTP {r.status_code}"
-
-    def test_open_endpoints_accessible(self):
-        """Açık endpoint'ler auth gerektirmeden erişilebilir."""
-        open_paths = ["/api/auth/signin"]
-        for path in open_paths:
-            r = requests.get(f"{BASE}{path}", timeout=5)
-            # 401 dışında bir yanıt olmalı (405 = GET desteklenmiyor ama var)
-            assert r.status_code != 404, \
-                f"{path} bulunamadı (404)"
+        response = requests.post(
+            f"{BASE}/api/auth/signin",
+            json={"username": "nonexistent", "password": "wrong"},
+            timeout=5,
+        )
+        assert response.status_code in (401, 403, 500), f"Beklenmedik yanıt: HTTP {response.status_code}"
 
 
-class TestLiderApiEndpoints:
-    """REST endpoint yapısı testleri."""
+class TestLiderApiV1Surface:
+    def test_dashboard_info_available(self, lider_api):
+        payload = lider_api.get_dashboard_info()
+        assert isinstance(payload, dict), "Dashboard payload alınamadı"
+        assert "totalComputerNumber" in payload, "Dashboard contract eksik: totalComputerNumber"
 
-    def test_computers_endpoint_exists(self):
-        """GET /api/computers endpoint'i mevcut (401 kabul)."""
-        r = requests.get(f"{BASE}/api/computers", timeout=5)
-        # 401 = auth gerekiyor ama endpoint var
-        assert r.status_code != 404, \
-            "GET /api/computers endpoint'i bulunamadı (404)"
+    def test_agent_info_list_available(self, lider_api):
+        agents = lider_api.get_agent_list()
+        assert isinstance(agents, list), "Agent info list payload list değil"
 
-    def test_tasks_endpoint_exists(self):
-        """POST /api/tasks endpoint'i mevcut."""
-        r = requests.post(f"{BASE}/api/tasks",
-                          json={}, timeout=5)
-        assert r.status_code != 404, \
-            "POST /api/tasks endpoint'i bulunamadı (404)"
+    def test_plugin_task_catalog_filtered(self, lider_api):
+        tasks = lider_api.get_plugin_tasks()
+        command_ids = {task.get("commandId") for task in tasks}
+        assert "EXECUTE_SCRIPT" in command_ids, "EXECUTE_SCRIPT görünmüyor"
+        assert "GET_FILE_CONTENT" in command_ids, "GET_FILE_CONTENT görünmüyor"
+        assert "MANAGE_USB" not in command_ids, "V1 dışı USB görevi katalogda görünmemeli"
+        assert "SETUP-VNC-SERVER" not in command_ids, "V1 dışı remote-access görevi katalogda görünmemeli"
 
-    def test_lider_info_endpoint(self):
-        """GET /api/lider-info erişilebilir (açık endpoint)."""
-        r = requests.get(f"{BASE}/api/lider-info", timeout=5)
-        # Bu endpoint auth gerektirmez
-        assert r.status_code in (200, 404, 500), \
-            f"/api/lider-info beklenmedik yanıt: HTTP {r.status_code}"
+    def test_plugin_profile_catalog_filtered(self, lider_api):
+        profiles = lider_api.get_plugin_profiles()
+        pages = {profile.get("page") for profile in profiles}
+        assert "execute-script-profile" in pages, "Script profile görünmüyor"
+        assert "usb-profile" not in pages, "USB profile V1'de görünmemeli"
+        assert "browser-profile" not in pages, "Browser profile V1'de görünmemeli"
 
-    def test_api_version_consistent(self, lider_api):
-        """Ardışık health check çağrıları tutarlı."""
-        result1 = lider_api.health_check()
-        result2 = lider_api.health_check()
-        assert result1 == result2, \
-            "Ardışık health check sonuçları farklı"
+    def test_execute_script_endpoint_exists(self):
+        response = requests.post(f"{BASE}/api/lider/task/execute/script", json={}, timeout=5)
+        assert response.status_code != 404, "Script execute endpoint bulunamadı"
+
+    def test_policy_endpoints_exist(self, lider_api):
+        active = lider_api.get_active_policies()
+        assert isinstance(active, list), "Active policy list payload list değil"

@@ -117,3 +117,28 @@ services:
         condition: service_healthy
       mariadb:
         condition: service_healthy
+
+  db-migrate:
+    image: mariadb:10.11
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mysql \
+          --host=mariadb \
+          --user="${MYSQL_USER}" \
+          --password="${MYSQL_PASSWORD}" \
+          "${MYSQL_DATABASE}" \
+          < /migrations/migrate-v1.sql
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ../services/mariadb/migrate-v1.sql:/migrations/migrate-v1.sql:ro
+    networks:
+      - liderahenk_core
+    depends_on:
+      mariadb:
+        condition: service_healthy

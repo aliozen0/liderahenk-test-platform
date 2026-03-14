@@ -32,17 +32,25 @@ services:
     build:
       context: ../services/ahenk
       dockerfile: Dockerfile
+      args:
+        AHENK_UPSTREAM_SHA: ${AHENK_UPSTREAM_SHA:-c0f216b05c335883d5b35bf606eac39bcb98b4bd}
     depends_on:
       provisioner:
         condition: service_completed_successfully
     networks:
       - liderahenk_agents
     environment:
+      AHENK_VERSION: ${AHENK_VERSION}
+      CONTAINER_MODE: ${CONTAINER_MODE:-1}
+      DEBUG_MODE: ${DEBUG_MODE:-0}
+      AHENK_AGENT_MODE: ${AHENK_AGENT_MODE:-semi-privileged}
+      AHENK_RUN_AS_ROOT: ${AHENK_RUN_AS_ROOT:-1}
+      NETWORK_PORT_RULE_MODE: ${NETWORK_PORT_RULE_MODE:-shadow}
       XMPP_HOST: ejabberd
       XMPP_DOMAIN: ${XMPP_DOMAIN}
       XMPP_RESOURCE: ${XMPP_RESOURCE}
-      LIDER_USER: ${LIDER_ADMIN_UID:-lider-admin}
-      LIDER_PASS: ${LIDER_ADMIN_PASS:-secret}
+      LIDER_USER: ${LIDER_USER:-lider-admin}
+      LIDER_PASS: ${LIDER_PASS:-secret}
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}

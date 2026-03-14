@@ -9,6 +9,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
+      db-migrate:
+        condition: service_completed_successfully
       mariadb:
         condition: service_healthy
       ldap:
@@ -31,8 +33,11 @@ services:
       XMPP_HOST: ejabberd
       XMPP_DOMAIN: ${XMPP_DOMAIN}
       XMPP_RESOURCE: ${XMPP_RESOURCE}
+      XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
       LDAP_AGENT_BASE_DN: ${LDAP_AGENT_BASE_DN}
       AHENK_COUNT: ${AHENK_COUNT}
+      ENABLE_LEGACY_REGISTRATION_SIM: ${ENABLE_LEGACY_REGISTRATION_SIM:-0}
+      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f karaf || exit 1"]
       interval: 15s
@@ -67,6 +72,8 @@ services:
       XMPP_HOST: ejabberd
       XMPP_DOMAIN: ${XMPP_DOMAIN}
       XMPP_RESOURCE: ${XMPP_RESOURCE}
+      XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
+      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
     healthcheck:
       test: ["CMD-SHELL", "curl -so /dev/null http://localhost:8080/actuator/health || exit 1"]
       interval: 15s
@@ -88,6 +95,8 @@ services:
     environment:
       LIDER_API_URL: ${LIDER_API_URL}
       LIDER_API_VERSION: ${LIDER_API_VERSION}
+      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
+      UI_DISABLED_FEATURES: ${UI_DISABLED_FEATURES}
 
 networks:
   liderahenk_core:
