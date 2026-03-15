@@ -1,35 +1,20 @@
-# ============================================
-# LiderAPI — Multi-Stage Maven Build
-# ============================================
-# Stage 1: Build
 FROM maven:3-eclipse-temurin-21 AS builder
 
-WORKDIR /build
-ARG LIDER_GIT_URL=https://github.com/Pardus-LiderAhenk/liderapi.git
+ARG LIDERAPI_UPSTREAM_REF=
 
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone ${LIDER_GIT_URL} .
+WORKDIR /workspace
 
-# SSHA desteği ekleyen patch'ler — OpenLDAP bind uyumluluğu için
-COPY patches/CustomPasswordEncoder.java src/main/java/tr/org/lider/security/CustomPasswordEncoder.java
-COPY patches/Lider2Application.java src/main/java/tr/org/lider/Lider2Application.java
-COPY patches/LDAPServiceImpl.java src/main/java/tr/org/lider/ldap/LDAPServiceImpl.java
-COPY patches/DashboardService.java src/main/java/tr/org/lider/services/DashboardService.java
+COPY platform /workspace/platform
+COPY services/liderapi /workspace/services/liderapi
 
-# agent-info/list NPE + CoercionException fix'leri
-COPY patches/AgentDTO.java src/main/java/tr/org/lider/dto/AgentDTO.java
-COPY patches/AgentService.java src/main/java/tr/org/lider/services/AgentService.java
-COPY patches/AgentPresenceService.java src/main/java/tr/org/lider/services/AgentPresenceService.java
-COPY patches/AgentInventorySyncService.java src/main/java/tr/org/lider/services/AgentInventorySyncService.java
-COPY patches/AgentInfoCriteriaBuilder.java src/main/java/tr/org/lider/repositories/AgentInfoCriteriaBuilder.java
-COPY patches/ProfileImpl.java src/main/java/tr/org/lider/entities/ProfileImpl.java
-COPY patches/OperationLogImpl.java src/main/java/tr/org/lider/entities/OperationLogImpl.java
-COPY patches/CommandExecutionImpl.java src/main/java/tr/org/lider/entities/CommandExecutionImpl.java
-COPY patches/LiderCronJob.java src/main/java/tr/org/lider/LiderCronJob.java
-COPY patches/PluginService.java src/main/java/tr/org/lider/services/PluginService.java
-COPY patches/PluginTaskService.java src/main/java/tr/org/lider/services/PluginTaskService.java
+RUN chmod +x /workspace/platform/scripts/*.sh
+RUN REPO_ROOT=/workspace LIDERAPI_UPSTREAM_REF="${LIDERAPI_UPSTREAM_REF}" \
+    /workspace/platform/scripts/prepare_component_source.sh liderapi /build
+
+WORKDIR /build
 
 RUN mvn clean package -DskipTests --no-transfer-progress
 
@@ -45,10 +30,10 @@ WORKDIR /app
 
 # WAR dosyasını kopyala — Spring Boot WAR, java -jar ile çalıştırılabilir
 COPY --from=builder /build/target/ROOT.war app.war
-COPY jmx_prometheus_javaagent.jar /opt/jmx_exporter.jar
-COPY jmx_config.yml /opt/jmx_config.yml
+COPY services/liderapi/jmx_prometheus_javaagent.jar /opt/jmx_exporter.jar
+COPY services/liderapi/jmx_config.yml /opt/jmx_config.yml
 RUN mkdir -p /etc/lider
-COPY lider.properties /etc/lider/lider.properties
+COPY services/liderapi/lider.properties /etc/lider/lider.properties
 
 USER lider
 

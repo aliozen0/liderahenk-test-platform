@@ -47,8 +47,10 @@ services:
 
   liderapi:
     build:
-      context: ../services/liderapi
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/liderapi/Dockerfile
+      args:
+        LIDERAPI_UPSTREAM_REF: ${LIDERAPI_UPSTREAM_REF:-}
     restart: unless-stopped
     depends_on:
       lider-core:
@@ -84,8 +86,10 @@ services:
 
   lider-ui:
     build:
-      context: ../services/liderui
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/liderui/Dockerfile
+      args:
+        LIDERUI_UPSTREAM_REF: ${LIDERUI_UPSTREAM_REF:-}
     restart: unless-stopped
     depends_on:
       - liderapi

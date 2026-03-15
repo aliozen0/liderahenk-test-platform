@@ -30,8 +30,8 @@ services:
 
   ahenk:
     build:
-      context: ../services/ahenk
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/ahenk/Dockerfile
       args:
         AHENK_UPSTREAM_SHA: ${AHENK_UPSTREAM_SHA:-c0f216b05c335883d5b35bf606eac39bcb98b4bd}
     depends_on:

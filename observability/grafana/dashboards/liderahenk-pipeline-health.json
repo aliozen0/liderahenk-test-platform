@@ -13,6 +13,26 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "This dashboard shows telemetry pipeline health. `No data` on ejabberd API panels usually means the `ejabberd-exporter` container is still running an old image and should be rebuilt.",
+        "mode": "markdown"
+      },
+      "title": "How To Read",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Prometheus scrape health for the main observability jobs.",
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -50,9 +70,9 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 3
       },
-      "id": 1,
+      "id": 2,
       "options": {
         "reduceOptions": {
           "calcs": [
@@ -77,8 +97,13 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "How many metric samples Prometheus scraped from each target. Larger values are not errors by themselves.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
           "unit": "none"
         },
         "overrides": []
@@ -87,9 +112,9 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 3
       },
-      "id": 2,
+      "id": 3,
       "options": {
         "reduceOptions": {
           "calcs": [
@@ -114,6 +139,7 @@
         "type": "loki",
         "uid": "loki"
       },
+      "description": "Container logs successfully arriving in Loki, grouped by compose service.",
       "fieldConfig": {
         "defaults": {
           "decimals": 0
@@ -124,9 +150,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 8
       },
-      "id": 3,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [
@@ -155,8 +181,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Last observed ejabberd HTTP API duration by endpoint. `No data` means exporter metrics are missing, usually because the exporter image was not rebuilt.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "Exporter metric bekleniyor",
           "unit": "s"
         },
         "overrides": []
@@ -165,9 +193,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 8
       },
-      "id": 4,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [
@@ -196,8 +224,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "5 minute error rate for ejabberd API calls seen by the exporter. `No data` means the exporter has not exposed the new counter series yet.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "Exporter metric bekleniyor",
           "unit": "reqps"
         },
         "overrides": []
@@ -206,9 +236,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 16
       },
-      "id": 5,
+      "id": 6,
       "options": {
         "legend": {
           "calcs": [
@@ -236,6 +266,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Summary availability view generated from recording rules.",
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -273,9 +304,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 16
       },
-      "id": 6,
+      "id": 7,
       "options": {
         "reduceOptions": {
           "calcs": [
@@ -315,6 +346,6 @@
   "timezone": "",
   "title": "LiderAhenk Pipeline Health",
   "uid": "liderahenk-pipeline-health",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

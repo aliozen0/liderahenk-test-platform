@@ -1,0 +1,37 @@
+components:
+  liderapi:
+    strategy: managed_patch_queue
+    overlay_path: services/liderapi/wiring/patches/overlay
+    extension_path: services/liderapi/extensions
+    risk: high
+    target_state: provider_delegation
+  liderui:
+    strategy: managed_patch_queue
+    overlay_path: services/liderui/wiring/patches/overlay
+    extension_path: services/liderui/extensions
+    risk: high
+    target_state: feature_registry_and_wrappers
+  ahenk:
+    strategy: runtime_hooks
+    overlay_path: services/ahenk
+    extension_path: services/ahenk/hooks
+    risk: medium
+    target_state: modular_hook_dispatch
+  lidercore:
+    strategy: config_overlay
+    overlay_path: services/lidercore
+    extension_path: services/lidercore
+    risk: low
+    target_state: env_driven_bootstrap
+  provisioner:
+    strategy: local_owned
+    overlay_path: services/provisioner
+    extension_path: services/provisioner
+    risk: low
+    target_state: orchestration_owner
+  compose_docs_contracts:
+    strategy: local_owned
+    overlay_path: compose
+    extension_path: docs
+    risk: low
+    target_state: platform_surface
