@@ -16,7 +16,7 @@ PLAYWRIGHT_IMAGE ?= node:20-bookworm
 # Varsayılan ölçekleme sayısı
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: dev-core dev-lider dev dev-scale dev-obs dev-full build-lider build-agents stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health test-integration test-scale run-scenario
+.PHONY: dev-core dev-lider dev dev-scale dev-obs dev-full build-lider build-agents stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health test-integration test-scale run-scenario test-e2e
 
 ## Çekirdek servisleri başlat (mariadb, ldap, ejabberd)
 dev-core:
@@ -167,3 +167,10 @@ test-scale:
 run-scenario:
 	python3 -m pip install --break-system-packages -r requirements-test.txt -q
 	PYTHONPATH=. python3 orchestrator/cli.py --scenario orchestrator/scenarios/$(S)
+
+## Playwright ile E2E Testleri koştur (Faz 1-2)
+test-e2e:
+	@echo "🎭 E2E testleri koşturuluyor..."
+	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	python3 -m playwright install chromium
+	PYTHONPATH=. python3 -m pytest tests/e2e/specs/ -v --timeout=120

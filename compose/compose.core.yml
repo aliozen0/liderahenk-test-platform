@@ -33,7 +33,11 @@ services:
       - liderahenk_core
     # PORT YAYIMLAMA YOK — sadece iç ağdan erişim
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysql --protocol=TCP -h127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null 2>&1 || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -125,11 +129,33 @@ services:
       - /bin/sh
       - -ec
       - |
+        echo "[db-migrate] mariadb TCP readiness bekleniyor..."
+        ready=0
+        for attempt in $$(seq 1 60); do
+          if mysql \
+            --protocol=TCP \
+            --connect-timeout=2 \
+            --host=mariadb \
+            --user="$${MYSQL_USER}" \
+            --password="$${MYSQL_PASSWORD}" \
+            "$${MYSQL_DATABASE}" \
+            -e "SELECT 1" >/dev/null 2>&1; then
+            echo "[db-migrate] mariadb hazır (deneme=$${attempt})"
+            ready=1
+            break
+          fi
+          sleep 2
+        done
+        if [ "$${ready}" -ne 1 ]; then
+          echo "[db-migrate] HATA: mariadb zamanında hazır olmadı" >&2
+          exit 1
+        fi
         mysql \
+          --protocol=TCP \
           --host=mariadb \
-          --user="${MYSQL_USER}" \
-          --password="${MYSQL_PASSWORD}" \
-          "${MYSQL_DATABASE}" \
+          --user="$${MYSQL_USER}" \
+          --password="$${MYSQL_PASSWORD}" \
+          "$${MYSQL_DATABASE}" \
           < /migrations/migrate-v1.sql
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}

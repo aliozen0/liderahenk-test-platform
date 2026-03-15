@@ -13,66 +13,47 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "FAIL"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "OK"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
-        "h": 3,
-        "w": 24,
+        "h": 6,
+        "w": 12,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "content": "[Pipeline Health](/d/liderahenk-pipeline-health) | [Workflow Health](/d/liderahenk-workflow-health) | [Jaeger](http://localhost:16686)",
-        "mode": "markdown"
-      },
-      "title": "Drilldowns",
-      "type": "text"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "DOWN"
-                },
-                "1": {
-                  "color": "green",
-                  "text": "UP"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 3
-      },
-      "id": 2,
-      "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -83,76 +64,12 @@
       },
       "targets": [
         {
-          "expr": "lider_probe_platform_up",
-          "legendFormat": "platform",
+          "expr": "lider_probe_success",
+          "legendFormat": "{{probe}}",
           "refId": "A"
         }
       ],
-      "title": "Read-only Workflow",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "DOWN"
-                },
-                "1": {
-                  "color": "green",
-                  "text": "UP"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 3
-      },
-      "id": 3,
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "expr": "telemetry:component_up",
-          "legendFormat": "{{job}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Telemetry Components",
+      "title": "Probe Status",
       "type": "stat"
     },
     {
@@ -169,19 +86,22 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
+        "h": 6,
+        "w": 12,
         "x": 12,
-        "y": 3
+        "y": 0
       },
-      "id": 4,
+      "id": 2,
       "options": {
-        "reduceOptions": {
+        "legend": {
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
-          "values": false
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
       "targets": [
@@ -192,45 +112,7 @@
         }
       ],
       "title": "Probe Success Ratio (5m)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "min": 0
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 3
-      },
-      "id": 5,
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "expr": "lider:agent_count_drift",
-          "legendFormat": "{{left}} vs {{right}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Agent Count Drift",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -247,9 +129,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 7
+        "y": 6
       },
-      "id": 6,
+      "id": 3,
       "options": {
         "legend": {
           "calcs": [
@@ -265,12 +147,12 @@
       },
       "targets": [
         {
-          "expr": "lider_probe_last_duration_seconds",
+          "expr": "lider:probe_last_duration_seconds",
           "legendFormat": "{{probe}}",
           "refId": "A"
         }
       ],
-      "title": "Probe Durations",
+      "title": "Probe Latency",
       "type": "timeseries"
     },
     {
@@ -288,9 +170,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 7
+        "y": 6
       },
-      "id": 7,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [
@@ -310,13 +192,13 @@
           "refId": "A"
         }
       ],
-      "title": "Agent Counts by Source",
+      "title": "Agent Visibility by Source",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "loki"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -326,18 +208,18 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 15
+        "y": 14
       },
-      "id": 8,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "right"
         },
         "tooltip": {
           "mode": "multi"
@@ -345,14 +227,87 @@
       },
       "targets": [
         {
-          "expr": "sum by (compose_service) (count_over_time({signal=\"logs\",compose_service=~\"liderapi|lider-core|ejabberd|ahenk\"}[5m]))",
-          "legendFormat": "{{compose_service}}",
-          "queryType": "range",
+          "expr": "lider_probe_agent_count_delta",
+          "legendFormat": "{{left}} vs {{right}}",
           "refId": "A"
         }
       ],
-      "title": "Logs per 5m",
+      "title": "Agent Count Delta",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "id": 6,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "lider_probe_dashboard_total_computers",
+          "legendFormat": "dashboard",
+          "refId": "A"
+        }
+      ],
+      "title": "Dashboard Total Computers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "id": 7,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "lider_probe_computer_tree_nodes",
+          "legendFormat": "tree",
+          "refId": "A"
+        }
+      ],
+      "title": "Computer Tree Nodes",
+      "type": "stat"
     }
   ],
   "refresh": "15s",
@@ -361,7 +316,7 @@
   "tags": [
     "liderahenk",
     "observability",
-    "summary"
+    "workflow"
   ],
   "templating": {
     "list": []
@@ -372,8 +327,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "LiderAhenk SLO Summary",
-  "uid": "liderahenk-slo",
-  "version": 2,
+  "title": "LiderAhenk Workflow Health",
+  "uid": "liderahenk-workflow-health",
+  "version": 1,
   "weekStart": ""
 }

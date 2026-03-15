@@ -37,6 +37,8 @@ services:
     depends_on:
       provisioner:
         condition: service_completed_successfully
+      liderapi:
+        condition: service_healthy
     networks:
       - liderahenk_agents
     environment:

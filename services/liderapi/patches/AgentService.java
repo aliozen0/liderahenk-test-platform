@@ -16,6 +16,7 @@ import tr.org.lider.entities.AgentImpl;
 import tr.org.lider.ldap.LDAPServiceImpl;
 import tr.org.lider.ldap.LdapEntry;
 import tr.org.lider.message.service.IMessagingService;
+import tr.org.lider.message.service.XMPPMessagingService;
 import tr.org.lider.repositories.AgentInfoCriteriaBuilder;
 import tr.org.lider.repositories.AgentRepository;
 
@@ -36,6 +37,34 @@ public class AgentService {
 	
 	@Autowired
 	private LDAPServiceImpl ldapService;
+
+	@Autowired
+	private AgentPresenceService agentPresenceService;
+
+	private boolean isAgentOnline(String recipient) {
+		if (recipient == null || recipient.isBlank()) {
+			return false;
+		}
+
+		if (agentPresenceService.isOnline(recipient)) {
+			return true;
+		}
+
+		if (messagingService instanceof XMPPMessagingService xmppMessagingService) {
+			List<String> onlineUsers = xmppMessagingService.getOnlineUsers();
+			if (onlineUsers != null) {
+				if (onlineUsers.contains(recipient)) {
+					return true;
+				}
+				String bareUid = recipient.contains("@") ? recipient.substring(0, recipient.indexOf('@')) : recipient;
+				if (onlineUsers.contains(bareUid)) {
+					return true;
+				}
+			}
+		}
+
+		return messagingService.isRecipientOnline(recipient);
+	}
 	
 	public List<AgentImpl> findAll() {
         return agentRepository.findAll();
@@ -128,7 +157,7 @@ public class AgentService {
 		Page<AgentImpl> listOfAgentsCB = agentInfoCB.filterAgents(agentDTO,listOfOnlineUsers );
 		
 		for (int i = 0; i < listOfAgentsCB.getContent().size(); i++) {
-			if(messagingService.isRecipientOnline(listOfAgentsCB.getContent().get(i).getJid())) {
+			if(isAgentOnline(listOfAgentsCB.getContent().get(i).getJid())) {
 				listOfAgentsCB.getContent().get(i).setIsOnline(true);
 			}
 			else {

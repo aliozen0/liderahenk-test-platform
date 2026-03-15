@@ -13,25 +13,6 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "gridPos": {
-        "h": 3,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "content": "[Pipeline Health](/d/liderahenk-pipeline-health) | [Workflow Health](/d/liderahenk-workflow-health) | [Jaeger](http://localhost:16686)",
-        "mode": "markdown"
-      },
-      "title": "Drilldowns",
-      "type": "text"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -66,10 +47,47 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
+        "h": 5,
+        "w": 12,
         "x": 0,
-        "y": 3
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"alloy|platform-exporter|otel-collector|ejabberd|lider-core|liderapi\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Telemetry Jobs",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 0
       },
       "id": 2,
       "options": {
@@ -83,13 +101,135 @@
       },
       "targets": [
         {
-          "expr": "lider_probe_platform_up",
-          "legendFormat": "platform",
+          "expr": "scrape_samples_scraped{job=~\"alloy|platform-exporter|otel-collector|ejabberd|lider-core|liderapi\"}",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Read-only Workflow",
+      "title": "Scrape Samples",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (compose_service) (count_over_time({signal=\"logs\"}[5m]))",
+          "legendFormat": "{{compose_service}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Ingestion by Service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "ejabberd_api_request_duration_seconds",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "ejabberd API Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(ejabberd_api_requests_total{result=\"error\"}[5m])",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "ejabberd API Error Rate",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -130,12 +270,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 3
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
       },
-      "id": 3,
+      "id": 6,
       "options": {
         "reduceOptions": {
           "calcs": [
@@ -152,207 +292,8 @@
           "refId": "A"
         }
       ],
-      "title": "Telemetry Components",
+      "title": "Pipeline Availability",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "max": 1,
-          "min": 0,
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 3
-      },
-      "id": 4,
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "expr": "lider:probe_success_ratio5m",
-          "legendFormat": "{{probe}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Probe Success Ratio (5m)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "min": 0
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 3
-      },
-      "id": 5,
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "expr": "lider:agent_count_drift",
-          "legendFormat": "{{left}} vs {{right}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Agent Count Drift",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 7
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "lider_probe_last_duration_seconds",
-          "legendFormat": "{{probe}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Probe Durations",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "lider_probe_agent_count",
-          "legendFormat": "{{source}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Agent Counts by Source",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 15
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (compose_service) (count_over_time({signal=\"logs\",compose_service=~\"liderapi|lider-core|ejabberd|ahenk\"}[5m]))",
-          "legendFormat": "{{compose_service}}",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Logs per 5m",
-      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -361,7 +302,7 @@
   "tags": [
     "liderahenk",
     "observability",
-    "summary"
+    "pipeline"
   ],
   "templating": {
     "list": []
@@ -372,8 +313,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "LiderAhenk SLO Summary",
-  "uid": "liderahenk-slo",
-  "version": 2,
+  "title": "LiderAhenk Pipeline Health",
+  "uid": "liderahenk-pipeline-health",
+  "version": 1,
   "weekStart": ""
 }

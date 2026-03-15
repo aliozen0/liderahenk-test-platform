@@ -9,6 +9,7 @@ services:
     volumes:
       - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ../observability/prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml:ro
       - prometheus_data:/prometheus
     networks:
       - liderahenk_obs
@@ -49,6 +50,66 @@ services:
       - liderahenk_obs
     ports:
       - "127.0.0.1:3100:3100"
+
+  grafana-alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ../observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - liderahenk_obs
+    ports:
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      - loki
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    restart: unless-stopped
+    volumes:
+      - ../observability/otel:/etc/otel:ro
+    networks:
+      - liderahenk_obs
+      - liderahenk_core
+      - liderahenk_agents
+    command: ["--config=/etc/otel/otel-config.base.yml"]
+
+  platform-exporter:
+    build:
+      context: ../services/platform-exporter
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      EXPORTER_PORT: "9790"
+      PROBE_INTERVAL_SECONDS: ${PLATFORM_EXPORTER_INTERVAL_SECONDS:-15}
+      LIDER_API_URL: http://liderapi:8080
+      LIDER_USER: ${LIDER_USER:-lider-admin}
+      LIDER_PASS: ${LIDER_PASS:-secret}
+      EJABBERD_API: http://ejabberd:5280/api
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+      LDAP_HOST: ldap
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_AGENT_BASE_DN: ${LDAP_AGENT_BASE_DN}
+      LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+    networks:
+      - liderahenk_obs
+      - liderahenk_core
+    depends_on:
+      liderapi:
+        condition: service_healthy
+      ldap:
+        condition: service_healthy
+      ejabberd:
+        condition: service_healthy
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
@@ -95,3 +156,4 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  alloy_data:

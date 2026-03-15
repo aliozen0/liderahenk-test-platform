@@ -73,6 +73,7 @@ services:
       XMPP_DOMAIN: ${XMPP_DOMAIN}
       XMPP_RESOURCE: ${XMPP_RESOURCE}
       XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
+      EJABBERD_API: ${EJABBERD_API:-http://ejabberd:5280/api}
       LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
     healthcheck:
       test: ["CMD-SHELL", "curl -so /dev/null http://localhost:8080/actuator/health || exit 1"]

@@ -13,15 +13,70 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
-  otel-collector:
-    image: otel/opentelemetry-collector:latest
-    restart: unless-stopped
+  otel-javaagent-init:
+    image: curlimages/curl:8.13.0
+    user: "0:0"
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - mkdir -p /otel && curl -fsSL https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVA_AGENT_VERSION:-2.23.0}/opentelemetry-javaagent.jar -o /otel/opentelemetry-javaagent.jar && ls -lh /otel/opentelemetry-javaagent.jar
     volumes:
-      - ../observability/otel/otel-config.yml:/etc/otel/config.yaml:ro
+      - otel_javaagent:/otel
     networks:
       - liderahenk_obs
-      - liderahenk_core
-      - liderahenk_agents
-    command: ["--config=/etc/otel/config.yaml"]
+
+  otel-collector:
+    command: ["--config=/etc/otel/otel-config.tracing.yml"]
     depends_on:
       - jaeger
+
+  lider-core:
+    depends_on:
+      otel-javaagent-init:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+    volumes:
+      - otel_javaagent:/opt/otel:ro
+    environment:
+      JAVA_TOOL_OPTIONS: -javaagent:/opt/otel/opentelemetry-javaagent.jar
+      OTEL_SERVICE_NAME: lider-core
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=liderahenk,deployment.environment=dev,service.version=${LIDER_VERSION:-3.x}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+
+  liderapi:
+    depends_on:
+      otel-javaagent-init:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+    volumes:
+      - otel_javaagent:/opt/otel:ro
+    environment:
+      JAVA_TOOL_OPTIONS: -javaagent:/opt/otel/opentelemetry-javaagent.jar
+      OTEL_SERVICE_NAME: liderapi
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=liderahenk,deployment.environment=dev,service.version=${LIDER_VERSION:-3.x}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+
+networks:
+  liderahenk_obs:
+    external: true
+    name: liderahenk-test_liderahenk_obs
+  liderahenk_core:
+    external: true
+    name: liderahenk-test_liderahenk_core
+  liderahenk_agents:
+    external: true
+    name: liderahenk-test_liderahenk_agents
+
+volumes:
+  otel_javaagent:

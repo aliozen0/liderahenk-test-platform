@@ -66,9 +66,11 @@ import org.springframework.stereotype.Service;
 
 import tr.org.lider.entities.CommandImpl;
 import tr.org.lider.message.service.IMessagingService;
+import tr.org.lider.message.service.XMPPMessagingService;
 import tr.org.lider.messaging.enums.DomainType;
 import tr.org.lider.security.User;
 import tr.org.lider.services.AdService;
+import tr.org.lider.services.AgentPresenceService;
 import tr.org.lider.services.AuthenticationService;
 import tr.org.lider.services.CommandService;
 import tr.org.lider.services.ConfigurationService;
@@ -102,11 +104,50 @@ public class LDAPServiceImpl implements ILDAPService {
 	
 	@Autowired
 	private AdService adService;
+
+	@Autowired
+	private AgentPresenceService agentPresenceService;
 	
 	//	@Autowired
 	//	private Environment env;
 
 	private LdapConnectionPool pool;
+
+	private boolean isAgentOnline(LdapEntry ldapEntry) {
+		if (ldapEntry == null || ldapEntry.getUid() == null || ldapEntry.getUid().isBlank()) {
+			return false;
+		}
+
+		String uid = ldapEntry.getUid().trim();
+		if (agentPresenceService.isOnline(uid)) {
+			return true;
+		}
+
+		if (messagingService instanceof XMPPMessagingService xmppMessagingService) {
+			List<String> onlineUsers = xmppMessagingService.getOnlineUsers();
+			if (onlineUsers != null) {
+				if (onlineUsers.contains(uid)) {
+					return true;
+				}
+				String bareUid = uid.contains("@") ? uid.substring(0, uid.indexOf('@')) : uid;
+				if (onlineUsers.contains(bareUid)) {
+					return true;
+				}
+			}
+		}
+
+		if (messagingService.isRecipientOnline(uid)) {
+			return true;
+		}
+
+		String domain = System.getenv("XMPP_DOMAIN");
+		if (domain == null || domain.isBlank()) {
+			domain = "liderahenk.org";
+		}
+
+		String bareJid = uid.contains("@") ? uid : uid + "@" + domain;
+		return messagingService.isRecipientOnline(bareJid);
+	}
 
 	/**
 	 * Pattern for task privileges (e.g. [TASK:dc=mys,dc=pardus,dc=org:ALL],
@@ -790,7 +831,7 @@ public class LDAPServiceImpl implements ILDAPService {
 					LdapEntry ldapEntry= new LdapEntry(entry.getDn().toString(), attrs,attributesMultiValues, priviliges,convertObjectClass2DNType(entry.get("objectClass")));
 
 					if(ldapEntry.getType()==DNType.AHENK) {
-						ldapEntry.setOnline(messagingService.isRecipientOnline(ldapEntry.getUid()));
+						ldapEntry.setOnline(isAgentOnline(ldapEntry));
 					}
 					result.add(ldapEntry);
 				}
@@ -930,7 +971,7 @@ public class LDAPServiceImpl implements ILDAPService {
 					ldapEntry.setModifyDateStr(crtDateModify);
 					
 					if(ldapEntry.getType()==DNType.AHENK) {
-						ldapEntry.setOnline(messagingService.isRecipientOnline(ldapEntry.getUid()));
+						ldapEntry.setOnline(isAgentOnline(ldapEntry));
 					}
 					result.add(ldapEntry);
 				}

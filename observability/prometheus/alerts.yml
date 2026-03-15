@@ -1,4 +1,4 @@
-# Prometheus Alert Rules — LiderAhenk SLO
+# Prometheus Alert Rules â€” LiderAhenk SLO
 groups:
   - name: liderahenk_slo
     rules:
@@ -8,7 +8,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "liderapi erişilemez"
+          summary: "liderapi eriÅŸilemez"
 
       - alert: LiderApiHighErrorRate
         expr: |
@@ -18,7 +18,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "liderapi 5xx hata oranı %5 üzerinde"
+          summary: "liderapi 5xx hata oranÄ± %5 Ã¼zerinde"
 
       - alert: TaskDeliveryLatencyHigh
         expr: |
@@ -28,7 +28,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Görev iletim gecikmesi p95 > 5sn"
+          summary: "GÃ¶rev iletim gecikmesi p95 > 5sn"
 
       - alert: LiderCoreDown
         expr: up{job="lider-core"} == 0
@@ -36,7 +36,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "lider-core JMX exporter erişilemez"
+          summary: "lider-core JMX exporter eriÅŸilemez"
 
       - alert: ContainerHighMemory
         expr: |
@@ -45,4 +45,28 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Konteyner bellek kullanımı %90 üzerinde"
+          summary: "Konteyner bellek kullanÄ±mÄ± %90 Ã¼zerinde"
+
+      - alert: TelemetryPipelineDown
+        expr: up{job=~"alloy|platform-exporter|otel-collector"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Telemetry pipeline bileÅŸeni eriÅŸilemez"
+
+      - alert: SyntheticPlatformProbeFailing
+        expr: lider:probe_success_ratio5m{probe=~"jwt_login|dashboard_info|agent_list|computer_tree"} < 0.5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Read-only platform probe baÅŸarÄ± oranÄ± dÃ¼ÅŸÃ¼k"
+
+      - alert: AgentVisibilityDrift
+        expr: lider:agent_count_drift > 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ajan gÃ¶rÃ¼nÃ¼rlÃ¼ÄŸÃ¼ kaynaklar arasÄ±nda tutarsÄ±z"

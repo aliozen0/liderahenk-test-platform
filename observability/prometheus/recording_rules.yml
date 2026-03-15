@@ -1,0 +1,17 @@
+groups:
+  - name: liderahenk_recordings
+    rules:
+      - record: lider:probe_success_ratio5m
+        expr: avg_over_time(lider_probe_success[5m])
+
+      - record: lider:probe_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (probe, le) (rate(lider_probe_duration_seconds_bucket[5m])))
+
+      - record: lider:probe_last_duration_seconds
+        expr: max by (probe) (lider_probe_last_duration_seconds)
+
+      - record: lider:agent_count_drift
+        expr: max by (left, right) (lider_probe_agent_count_delta)
+
+      - record: telemetry:component_up
+        expr: max by (job) (up{job=~"alloy|platform-exporter|otel-collector|ejabberd|lider-core|liderapi|mariadb|cadvisor"})

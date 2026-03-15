@@ -16,7 +16,9 @@ import org.springframework.stereotype.Component;
 import tr.org.lider.entities.AgentImpl;
 import tr.org.lider.entities.AgentStatus;
 import tr.org.lider.message.service.IMessagingService;
+import tr.org.lider.message.service.XMPPMessagingService;
 import tr.org.lider.repositories.AgentRepository;
+import tr.org.lider.services.AgentPresenceService;
 import tr.org.lider.services.ConfigurationService;
 import tr.org.lider.services.TaskSchedulerService;
 
@@ -36,7 +38,35 @@ public class LiderCronJob {
     @Autowired
     private TaskSchedulerService taskScheduledService;
 
+    @Autowired
+    private AgentPresenceService agentPresenceService;
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    private boolean isAgentOnline(String recipient) {
+        if (recipient == null || recipient.isBlank()) {
+            return false;
+        }
+
+        if (agentPresenceService.isOnline(recipient)) {
+            return true;
+        }
+
+        if (messagingService instanceof XMPPMessagingService xmppMessagingService) {
+            List<String> onlineUsers = xmppMessagingService.getOnlineUsers();
+            if (onlineUsers != null) {
+                if (onlineUsers.contains(recipient)) {
+                    return true;
+                }
+                String bareUid = recipient.contains("@") ? recipient.substring(0, recipient.indexOf('@')) : recipient;
+                if (onlineUsers.contains(bareUid)) {
+                    return true;
+                }
+            }
+        }
+
+        return messagingService.isRecipientOnline(recipient);
+    }
 
     @Scheduled(cron = "0 55 10 * * ?")
     public void dailyCronJob() {
@@ -48,7 +78,7 @@ public class LiderCronJob {
         List<AgentImpl> agentsEventDate = agentRepository.findAll();
 
         for (AgentImpl agent : agentsEventDate) {
-            if (messagingService.isRecipientOnline(agent.getJid())) {
+            if (isAgentOnline(agent.getJid())) {
                 continue;
             }
 

@@ -16,10 +16,13 @@ RUN git clone ${LIDER_GIT_URL} .
 COPY patches/CustomPasswordEncoder.java src/main/java/tr/org/lider/security/CustomPasswordEncoder.java
 COPY patches/Lider2Application.java src/main/java/tr/org/lider/Lider2Application.java
 COPY patches/LDAPServiceImpl.java src/main/java/tr/org/lider/ldap/LDAPServiceImpl.java
+COPY patches/DashboardService.java src/main/java/tr/org/lider/services/DashboardService.java
 
 # agent-info/list NPE + CoercionException fix'leri
 COPY patches/AgentDTO.java src/main/java/tr/org/lider/dto/AgentDTO.java
 COPY patches/AgentService.java src/main/java/tr/org/lider/services/AgentService.java
+COPY patches/AgentPresenceService.java src/main/java/tr/org/lider/services/AgentPresenceService.java
+COPY patches/AgentInventorySyncService.java src/main/java/tr/org/lider/services/AgentInventorySyncService.java
 COPY patches/AgentInfoCriteriaBuilder.java src/main/java/tr/org/lider/repositories/AgentInfoCriteriaBuilder.java
 COPY patches/ProfileImpl.java src/main/java/tr/org/lider/entities/ProfileImpl.java
 COPY patches/OperationLogImpl.java src/main/java/tr/org/lider/entities/OperationLogImpl.java
