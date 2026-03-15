@@ -13,15 +13,48 @@ COMPOSE_CMD     = docker compose --env-file .env
 PROJECT_NAME    = liderahenk-test
 EVIDENCE_PROJECT_NAME ?= liderahenk-test-evidence
 PLAYWRIGHT_IMAGE ?= node:20-bookworm
+NETWORK_CORE    = $(PROJECT_NAME)_liderahenk_core
+NETWORK_AGENTS  = $(PROJECT_NAME)_liderahenk_agents
+NETWORK_OBS     = $(PROJECT_NAME)_liderahenk_obs
+NETWORK_EXTERNAL = $(PROJECT_NAME)_liderahenk_external
 
 # Default agent scale
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: dev-core dev-lider dev dev-scale dev-obs dev-full build-lider build-agents build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health test-integration test-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e upstream-diff verify-candidate promote-candidate test-acceptance
+.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev dev-scale dev-obs dev-full build-lider build-agents build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e test-e2e-smoke test-e2e-management test-release-gate upstream-diff verify-candidate promote-candidate test-acceptance
+
+## Create external Docker networks required by compose overlays
+network-init:
+	@echo "Ensuring Docker networks exist..."
+	@docker network inspect $(NETWORK_CORE) >/dev/null 2>&1 || docker network create --driver bridge --internal $(NETWORK_CORE)
+	@docker network inspect $(NETWORK_AGENTS) >/dev/null 2>&1 || docker network create --driver bridge $(NETWORK_AGENTS)
+	@docker network inspect $(NETWORK_OBS) >/dev/null 2>&1 || docker network create --driver bridge $(NETWORK_OBS)
+	@docker network inspect $(NETWORK_EXTERNAL) >/dev/null 2>&1 || docker network create --driver bridge $(NETWORK_EXTERNAL)
+	@echo "Docker networks ready."
+
+## Verify required Docker networks exist
+network-check:
+	@echo "Checking Docker networks..."
+	@docker network inspect $(NETWORK_CORE) >/dev/null 2>&1 && echo "OK $(NETWORK_CORE)" || (echo "MISSING $(NETWORK_CORE)" && exit 1)
+	@docker network inspect $(NETWORK_AGENTS) >/dev/null 2>&1 && echo "OK $(NETWORK_AGENTS)" || (echo "MISSING $(NETWORK_AGENTS)" && exit 1)
+	@docker network inspect $(NETWORK_OBS) >/dev/null 2>&1 && echo "OK $(NETWORK_OBS)" || (echo "MISSING $(NETWORK_OBS)" && exit 1)
+	@docker network inspect $(NETWORK_EXTERNAL) >/dev/null 2>&1 && echo "OK $(NETWORK_EXTERNAL)" || (echo "MISSING $(NETWORK_EXTERNAL)" && exit 1)
+
+## Recreate Docker networks when overlays drift
+network-reset:
+	@echo "Recreating Docker networks..."
+	@docker network rm $(NETWORK_EXTERNAL) $(NETWORK_OBS) $(NETWORK_AGENTS) $(NETWORK_CORE) >/dev/null 2>&1 || true
+	@$(MAKE) network-init
+
+## Install local Python test dependencies
+install-test-deps:
+	@echo "Installing Python test dependencies..."
+	python3 -m pip install --break-system-packages -r requirements-test.txt -q
 
 ## Start core services (mariadb, ldap, ejabberd)
 dev-core:
 	@echo "Starting core services..."
+	@$(MAKE) network-init
 	$(COMPOSE_CMD) $(COMPOSE_CORE) -p $(PROJECT_NAME) up -d
 	@echo "Waiting for healthchecks..."
 	@sleep 5
@@ -45,6 +78,7 @@ build-obs:
 ## Start core + Lider services
 dev-lider:
 	@echo "Starting core + Lider services..."
+	@$(MAKE) network-init
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) up -d
 	@echo "Waiting for healthchecks..."
 	@sleep 10
@@ -53,6 +87,7 @@ dev-lider:
 ## Start all services (core + lider + agent)
 dev:
 	@echo "Starting full platform..."
+	@$(MAKE) network-init
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
@@ -60,6 +95,7 @@ dev:
 ## Start scaled agents (usage: make dev-scale N=20)
 dev-scale:
 	@echo "Starting full platform with ahenk x$(N)..."
+	@$(MAKE) network-init
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
@@ -96,7 +132,7 @@ status:
 ## Contract tests - all adapters
 test-contract:
 	@echo "Running contract tests..."
-	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	@$(MAKE) install-test-deps
 	PYTHONPATH=. pytest contracts/ -v --timeout=30 --tb=short
 
 ## REST contract tests only
@@ -114,6 +150,7 @@ test-contract-xmpp:
 ## Start observability stack (core + lider + agent + obs)
 dev-obs:
 	@echo "Starting observability stack..."
+	@$(MAKE) network-init
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) ps
@@ -121,6 +158,7 @@ dev-obs:
 ## Start full stack (core + lider + agent + obs + tracing)
 dev-full:
 	@echo "Starting full stack..."
+	@$(MAKE) network-init
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
@@ -161,7 +199,7 @@ health:
 ## Integration tests
 test-integration:
 	@echo "Running integration tests..."
-	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	@$(MAKE) install-test-deps
 	PYTHONPATH=. pytest tests/test_integration.py -v --timeout=60
 
 ## Scale tests
@@ -172,30 +210,61 @@ test-scale:
 ## Observability acceptance tests
 test-observability:
 	@echo "Running observability acceptance tests..."
-	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	@$(MAKE) install-test-deps
 	PYTHONPATH=. pytest tests/test_observability.py -v --timeout=120
 
 ## Logs + metrics + traces evidence tests
 test-evidence:
 	@echo "Running evidence pipeline tests..."
-	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	@$(MAKE) install-test-deps
 	PYTHONPATH=. pytest tests/test_evidence_pipeline.py -v --timeout=120
 
 ## Disposable isolated evidence run
 test-evidence-isolated:
 	@EVIDENCE_PROJECT_NAME=$(EVIDENCE_PROJECT_NAME) ./scripts/run_evidence_stack.sh
 
+## Generate a markdown/json quality report under artifacts/
+quality-report:
+	@echo "Generating quality report..."
+	@$(MAKE) install-test-deps
+	PYTHONPATH=. python3 scripts/generate_quality_report.py
+
 ## Run scenario (usage: make run-scenario S=registration_test.yml)
 run-scenario:
-	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	@$(MAKE) install-test-deps
 	PYTHONPATH=. python3 orchestrator/cli.py --scenario orchestrator/scenarios/$(S)
 
 ## Run Playwright E2E tests
 test-e2e:
 	@echo "Running E2E tests..."
-	python3 -m pip install --break-system-packages -r requirements-test.txt -q
+	@$(MAKE) install-test-deps
+	mkdir -p artifacts/e2e
 	python3 -m playwright install chromium
-	PYTHONPATH=. python3 -m pytest tests/e2e/specs/ -v --timeout=120
+	PYTHONPATH=. python3 -m pytest tests/e2e/specs/ -v -m "e2e" --timeout=180 --html=artifacts/e2e/all.html --self-contained-html --junitxml=artifacts/e2e/all.junit.xml
+
+## Run only the smoke/login E2E profile
+test-e2e-smoke:
+	@echo "Running E2E smoke tests..."
+	@$(MAKE) install-test-deps
+	mkdir -p artifacts/e2e
+	python3 -m playwright install chromium
+	PYTHONPATH=. python3 -m pytest tests/e2e/specs/ -v -m "e2e and smoke" --timeout=120 --html=artifacts/e2e/smoke.html --self-contained-html --junitxml=artifacts/e2e/smoke.junit.xml
+
+## Run hybrid management-oriented E2E flows
+test-e2e-management:
+	@echo "Running E2E management tests..."
+	@$(MAKE) install-test-deps
+	mkdir -p artifacts/e2e
+	python3 -m playwright install chromium
+	PYTHONPATH=. python3 -m pytest tests/e2e/specs/ -v -m "e2e and management" --timeout=180 --html=artifacts/e2e/management.html --self-contained-html --junitxml=artifacts/e2e/management.junit.xml
+
+## Run a release-oriented quality gate
+test-release-gate:
+	@echo "Running release gate..."
+	@$(MAKE) test-observability
+	@$(MAKE) test-evidence
+	@$(MAKE) test-e2e-smoke
+	@$(MAKE) quality-report
 
 ## Show manifest vs remote upstream state
 upstream-diff:

@@ -56,3 +56,14 @@ SET @command_execution_sql = (
 PREPARE stmt FROM @command_execution_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+UPDATE c_config
+SET value = JSON_SET(
+    value,
+    '$.userGroupLdapBaseDn',
+    JSON_UNQUOTE(JSON_EXTRACT(value, '$.groupLdapBaseDn'))
+)
+WHERE name = 'liderConfigParams'
+  AND JSON_VALID(value)
+  AND JSON_EXTRACT(value, '$.groupLdapBaseDn') IS NOT NULL
+  AND JSON_UNQUOTE(JSON_EXTRACT(value, '$.userGroupLdapBaseDn')) <> JSON_UNQUOTE(JSON_EXTRACT(value, '$.groupLdapBaseDn'));

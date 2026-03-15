@@ -22,7 +22,18 @@
             loadNodeOuUrl="/api/lider/computer/ou-details"
             :treeNodeClick="treeNodeClick"
             isAgentTree="true"
-            :searchFields="searchFields">
+            :searchFields="searchFields"
+            @handleContextMenu="handleContextMenu">
+            <template #contextmenu>
+                <div
+                    class="el-overlay mycontextmenu"
+                    v-show="showContextMenu"
+                    @click="closeContextMenu">
+                    <div ref="rightMenu">
+                        <Menu :model="contextMenuItems"/>
+                    </div>
+                </div>
+            </template>
         </tree-component>
       </div>
       <div class="p-col-12 p-md-6 p-lg-9" style="margin-top:3px;">
@@ -71,6 +82,7 @@
             <div class="p-col">
                 <keep-alive>
                     <component 
+                        ref="activePlugin"
                         @move-selected-agent="moveSelectedAgent"
                         @delete-selected-agent="deleteSelectedAgent"
                         @rename-selected-agent="renameSelectedAgent"
@@ -120,6 +132,8 @@ export default {
                 online: 0,
                 offline: 0,
             },
+            showContextMenu: false,
+            contextMenuItems: [],
         };
     },
 
@@ -147,8 +161,95 @@ export default {
         },
 
         treeNodeClick(node) {
+            this.showContextMenu = false;
             this.setSelectedLiderNode(node);
             this.getAgentonlineOfflineCount(node);
+        },
+
+        closeContextMenu() {
+            this.showContextMenu = false;
+        },
+
+        async invokeSystemAction(actionName) {
+            this.selectedPluginTab = "system-management";
+            await this.$nextTick();
+            const activePlugin = this.$refs.activePlugin;
+            if (activePlugin && typeof activePlugin[actionName] === "function") {
+                activePlugin[actionName]();
+            }
+        },
+
+        handleContextMenu(event, node) {
+            event.preventDefault();
+            this.treeNodeClick(node);
+            switch (node.type) {
+                case "ORGANIZATIONAL_UNIT":
+                    this.contextMenuItems = [
+                        {
+                            label: this.$t("computer.agent_info.node_detail"),
+                            icon: "pi pi-list",
+                            command: () => this.invokeSystemAction("showNodeDetail"),
+                        },
+                        {
+                            label: this.$t("computer.agent_info.add_folder"),
+                            icon: "pi pi-folder-open",
+                            command: () => this.invokeSystemAction("openAddFolder"),
+                        },
+                    ];
+                    if (!node.isRoot) {
+                        this.contextMenuItems.push({
+                            label: this.$t("computer.agent_info.delete_folder"),
+                            icon: "pi pi-trash",
+                            command: () => this.invokeSystemAction("openDeleteFolder"),
+                        });
+                    }
+                    break;
+                case "AHENK":
+                case "WIND0WS_AHENK":
+                    this.contextMenuItems = [
+                        {
+                            label: this.$t("computer.agent_info.node_detail"),
+                            icon: "pi pi-list",
+                            command: () => this.invokeSystemAction("showNodeDetail"),
+                        },
+                        {
+                            label: this.$t("computer.agent_info.update"),
+                            icon: "pi pi-refresh",
+                            command: () => this.invokeSystemAction("openUpdateAgent"),
+                        },
+                        {
+                            label: this.$t("computer.agent_info.rename"),
+                            icon: "pi pi-pencil",
+                            command: () => this.invokeSystemAction("openRenameAgent"),
+                        },
+                        {
+                            label: this.$t("computer.agent_info.move_agent"),
+                            icon: "el-icon-rank",
+                            command: () => this.invokeSystemAction("openMoveAgent"),
+                        },
+                        {
+                            label: this.$t("computer.agent_info.delete_client"),
+                            icon: "pi pi-trash",
+                            command: () => this.invokeSystemAction("openDeleteAgent"),
+                        },
+                    ];
+                    break;
+                default:
+                    this.contextMenuItems = [];
+            }
+            if (!this.contextMenuItems.length) {
+                this.showContextMenu = false;
+                return;
+            }
+            this.$nextTick(() => {
+                if (this.$refs.rightMenu) {
+                    this.$refs.rightMenu.style.top = event.clientY + "px";
+                    this.$refs.rightMenu.style.left = event.clientX + "px";
+                    this.$refs.rightMenu.style.position = "fixed";
+                    this.$refs.rightMenu.style.margin = "0";
+                }
+                this.showContextMenu = true;
+            });
         },
 
         async getAgentonlineOfflineCount(node) {
@@ -222,7 +323,7 @@ export default {
         },
 
         renameSelectedAgent(selectedNode) {
-            this.$refs.tree.updateNode(selectedNode.distinguishedName, this.selectedNode);
+            this.$refs.tree.updateNode(selectedNode.distinguishedName, selectedNode);
         },
 
         addFolder(folder, destinationDn){

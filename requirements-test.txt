@@ -1,5 +1,6 @@
 pytest>=8.0
 pytest-timeout>=2.3
+pytest-html>=4.1
 python-dotenv>=1.0
 ldap3>=2.9
 requests>=2.31

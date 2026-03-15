@@ -3,6 +3,7 @@
     <div class="p-grid">
       <div class="p-col-12 p-md-6 p-lg-5">
         <agent-info class="plugin-card"
+          ref="agentInfo"
           :pluginTask="pluginTaskAgentInfo"
           @move-selected-agent="moveSelectedAgent"
           @delete-selected-agent="deleteSelectedAgent"
@@ -57,6 +58,66 @@ export default {
 
     moveSelectedAgent(deletedNode, selectedNode, destinationDn) {
       this.$emit('moveSelectedAgent', deletedNode, selectedNode, destinationDn);
+    },
+
+    showNodeDetail() {
+      this.$refs.agentInfo?.showNodeDetail?.();
+    },
+
+    openUpdateAgent() {
+      const agentInfo = this.$refs.agentInfo;
+      if (agentInfo?.selectedLiderNode?.type === "AHENK") {
+        agentInfo.updateAgentConfirm = true;
+      }
+    },
+
+    openRenameAgent() {
+      const agentInfo = this.$refs.agentInfo;
+      if (!agentInfo?.selectedLiderNode || agentInfo.selectedLiderNode.type !== "AHENK") {
+        return;
+      }
+      if (!agentInfo.selectedLiderNode.online) {
+        agentInfo.$toast.add({
+          severity:'warn',
+          detail: this.$t("computer.agent_info.rename_warn"),
+          summary:this.$t("computer.task.toast_summary"),
+          life: 3000
+        });
+        return;
+      }
+      agentInfo.renameAgentDialog = true;
+      agentInfo.newHostname = "";
+      agentInfo.validationRenameAgent = false;
+    },
+
+    openMoveAgent() {
+      const agentInfo = this.$refs.agentInfo;
+      if (agentInfo?.selectedLiderNode?.type === "AHENK") {
+        agentInfo.moveAgentDialog = true;
+      }
+    },
+
+    openDeleteAgent() {
+      const agentInfo = this.$refs.agentInfo;
+      if (agentInfo?.selectedLiderNode?.type === "AHENK") {
+        agentInfo.deleteAgentConfirm = true;
+      }
+    },
+
+    openAddFolder() {
+      const agentInfo = this.$refs.agentInfo;
+      if (agentInfo?.selectedLiderNode?.type === "ORGANIZATIONAL_UNIT") {
+        agentInfo.validationFolderName = false;
+        agentInfo.folderName = "";
+        agentInfo.addFolderDialog = true;
+      }
+    },
+
+    openDeleteFolder() {
+      const agentInfo = this.$refs.agentInfo;
+      if (agentInfo?.selectedLiderNode?.type === "ORGANIZATIONAL_UNIT") {
+        agentInfo.deleteFolderDialog = true;
+      }
     },
 
     deleteSelectedAgent(selectedNode) {
