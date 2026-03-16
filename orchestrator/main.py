@@ -16,9 +16,7 @@ from pathlib import Path
 # Proje kökünü sys.path'e ekle
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from adapters.lider_api_adapter import LiderApiAdapter
-from adapters.xmpp_message_adapter import XmppMessageAdapter
-from adapters.ldap_schema_adapter import LdapSchemaAdapter
+from adapters import build_platform_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -27,37 +25,10 @@ class ScenarioRunner:
     """YAML tabanlı senaryo motoru."""
 
     def __init__(self):
-        # Host-erişimli URL'ler (Docker-internal değil)
-        api_url = os.environ.get("LIDER_API_HOST_URL",
-                                 os.environ.get("LIDER_API_URL", "http://localhost:8082"))
-        # Docker-internal URL'leri host URL'lerine çevir
-        if "liderapi:8080" in api_url:
-            api_url = "http://localhost:8082"
-
-        ejabberd_url = os.environ.get("EJABBERD_API_HOST",
-                                      os.environ.get("EJABBERD_API_URL", "http://localhost:15280/api"))
-        if "ejabberd:5280" in ejabberd_url:
-            ejabberd_url = "http://localhost:15280/api"
-
-        self.api = LiderApiAdapter(
-            base_url=api_url,
-            username=os.environ.get("LIDER_USER", "lider-admin"),
-            password=os.environ.get("LIDER_PASS", "secret"),
-        )
-
-        self.xmpp = XmppMessageAdapter(
-            api_url=ejabberd_url,
-            domain=os.environ.get("XMPP_DOMAIN", "liderahenk.org"),
-        )
-
-        self.ldap = LdapSchemaAdapter(
-            host=os.environ.get("LDAP_HOST", "localhost"),
-            port=int(os.environ.get("LDAP_PORT", "1389")),
-            base_dn=os.environ.get("LDAP_BASE_DN", "dc=liderahenk,dc=org"),
-            admin_dn=f"cn={os.environ.get('LDAP_ADMIN_USERNAME', 'admin')},"
-                     f"{os.environ.get('LDAP_BASE_DN', 'dc=liderahenk,dc=org')}",
-            admin_pass=os.environ.get("LDAP_ADMIN_PASSWORD", "DEGISTIR"),
-        )
+        bundle = build_platform_bundle()
+        self.api = bundle.lider_api
+        self.xmpp = bundle.presence
+        self.ldap = bundle.directory
 
         self.ahenk_count = int(os.environ.get("AHENK_COUNT", "10"))
         self.state = {}

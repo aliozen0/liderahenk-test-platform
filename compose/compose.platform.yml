@@ -1,0 +1,37 @@
+services:
+  registration-orchestrator:
+    build:
+      context: ..
+      dockerfile: platform/services/registration-orchestrator/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      liderapi:
+        condition: service_healthy
+      ldap:
+        condition: service_healthy
+      ejabberd:
+        condition: service_healthy
+    environment:
+      AHENK_COUNT: ${AHENK_COUNT}
+      PLATFORM_RUNTIME_PROFILE: ${PLATFORM_RUNTIME_PROFILE:-dev-fast}
+      PLATFORM_ARTIFACTS_DIR: /artifacts/platform
+      PLATFORM_EXPORTER_INTERVAL_SECONDS: ${PLATFORM_EXPORTER_INTERVAL_SECONDS:-15}
+      LIDER_USER: ${LIDER_USER:-lider-admin}
+      LIDER_PASS: ${LIDER_PASS:-secret}
+      LIDER_API_URL: http://liderapi:8080
+      EJABBERD_API_URL: http://ejabberd:5280/api
+      LDAP_HOST: ldap
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      XMPP_DOMAIN: ${XMPP_DOMAIN}
+    volumes:
+      - ../artifacts/platform:/artifacts/platform
+    networks:
+      - liderahenk_core
+
+networks:
+  liderahenk_core:
+    external: true
+    name: liderahenk-test_liderahenk_core

@@ -4,25 +4,25 @@
   integration_mode: patch_queue
   patch_queue_path: services/liderapi/wiring/patches
   extension_source_path: services/liderapi/extensions
-  acceptance_profile: v1-broad
+  acceptance_profile: dev-fast
 - component: liderui
   upstream_url: https://github.com/Pardus-LiderAhenk/liderui.git
   upstream_ref: 51c8d7fbef91201b4739f2606b4f429f9de7b0a5
   integration_mode: patch_queue
   patch_queue_path: services/liderui/wiring/patches
   extension_source_path: services/liderui/extensions
-  acceptance_profile: v1-broad
+  acceptance_profile: dev-fast
 - component: ahenk
   upstream_url: https://github.com/Pardus-LiderAhenk/ahenk.git
   upstream_ref: c0f216b05c335883d5b35bf606eac39bcb98b4bd
   integration_mode: runtime_hooks
   patch_queue_path: services/ahenk
   extension_source_path: services/ahenk/hooks
-  acceptance_profile: v1-broad
+  acceptance_profile: dev-fast
 - component: lidercore
   upstream_url: https://github.com/Pardus-LiderAhenk/lider.git
   upstream_ref: managed-by-service
   integration_mode: config_overlay
   patch_queue_path: services/lidercore
   extension_source_path: services/lidercore
-  acceptance_profile: v1-broad
+  acceptance_profile: dev-fast

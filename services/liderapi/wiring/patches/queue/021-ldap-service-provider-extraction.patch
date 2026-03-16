@@ -1,0 +1,96 @@
+--- a/src/main/java/tr/org/lider/ldap/LDAPServiceImpl.java
++++ b/src/main/java/tr/org/lider/ldap/LDAPServiceImpl.java
+@@ -66,12 +66,11 @@
+ 
+ import tr.org.lider.entities.CommandImpl;
+ import tr.org.lider.message.service.IMessagingService;
+-import tr.org.lider.message.service.XMPPMessagingService;
+ import tr.org.lider.messaging.enums.DomainType;
+-import tr.org.lider.security.User;
+ import tr.org.lider.services.AdService;
+-import tr.org.lider.services.AgentPresenceService;
+-import tr.org.lider.services.AuthenticationService;
++import tr.org.lider.platform.ldap.AgentDirectoryPresenceResolver;
++import tr.org.lider.platform.ldap.LdapBindCredentials;
++import tr.org.lider.platform.ldap.LdapBindPolicy;
+ import tr.org.lider.services.CommandService;
+ import tr.org.lider.services.ConfigurationService;
+ 
+@@ -106,7 +105,10 @@
+ 	private AdService adService;
+ 
+ 	@Autowired
+-	private AgentPresenceService agentPresenceService;
++	private AgentDirectoryPresenceResolver agentDirectoryPresenceResolver;
++
++	@Autowired
++	private LdapBindPolicy ldapBindPolicy;
+ 	
+ 	//	@Autowired
+ 	//	private Environment env;
+@@ -114,39 +116,7 @@
+ 	private LdapConnectionPool pool;
+ 
+ 	private boolean isAgentOnline(LdapEntry ldapEntry) {
+-		if (ldapEntry == null || ldapEntry.getUid() == null || ldapEntry.getUid().isBlank()) {
+-			return false;
+-		}
+-
+-		String uid = ldapEntry.getUid().trim();
+-		if (agentPresenceService.isOnline(uid)) {
+-			return true;
+-		}
+-
+-		if (messagingService instanceof XMPPMessagingService xmppMessagingService) {
+-			List<String> onlineUsers = xmppMessagingService.getOnlineUsers();
+-			if (onlineUsers != null) {
+-				if (onlineUsers.contains(uid)) {
+-					return true;
+-				}
+-				String bareUid = uid.contains("@") ? uid.substring(0, uid.indexOf('@')) : uid;
+-				if (onlineUsers.contains(bareUid)) {
+-					return true;
+-				}
+-			}
+-		}
+-
+-		if (messagingService.isRecipientOnline(uid)) {
+-			return true;
+-		}
+-
+-		String domain = System.getenv("XMPP_DOMAIN");
+-		if (domain == null || domain.isBlank()) {
+-			domain = "liderahenk.org";
+-		}
+-
+-		String bareJid = uid.contains("@") ? uid : uid + "@" + domain;
+-		return messagingService.isRecipientOnline(bareJid);
++		return agentDirectoryPresenceResolver.isOnline(ldapEntry);
+ 	}
+ 
+ 	/**
+@@ -243,21 +213,9 @@
+ 		LdapConnectionConfig lconfig = new LdapConnectionConfig();
+ 		lconfig.setLdapHost(configurationService.getLdapServer());
+ 		lconfig.setLdapPort(Integer.parseInt(configurationService.getLdapPort()));
+-		boolean forceAdminBind = "v1-broad".equalsIgnoreCase(System.getenv("LIDER_FEATURE_PROFILE"))
+-				|| "1".equals(System.getenv("LIDER_FORCE_LDAP_ADMIN_BIND"));
+-		if (!forceAdminBind && AuthenticationService.isLogged()) {
+-			User user = AuthenticationService.getUser();
+-			if ( user != null && user.getPassword() != null && !user.getPassword().isEmpty()) {
+-				lconfig.setName(user.getDn());
+-				lconfig.setCredentials(user.getPassword());
+-			} else {
+-				lconfig.setName(configurationService.getLdapUsername());
+-				lconfig.setCredentials(configurationService.getLdapPassword());
+-			}
+-		}  else {
+-			lconfig.setName(configurationService.getLdapUsername());
+-			lconfig.setCredentials(configurationService.getLdapPassword());
+-		}
++		LdapBindCredentials bindCredentials = ldapBindPolicy.resolve(configurationService);
++		lconfig.setName(bindCredentials.bindDn());
++		lconfig.setCredentials(bindCredentials.password());
+ 
+ 		if (configurationService.getLdapUseSsl()) {
+ 			lconfig.setUseSsl(true);

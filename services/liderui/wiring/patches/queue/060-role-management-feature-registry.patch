@@ -1,0 +1,38 @@
+diff --git a/src/services/Roles/RoleManagement.js b/src/services/Roles/RoleManagement.js
+index 60be6a6..62caf8e 100644
+--- a/src/services/Roles/RoleManagement.js
++++ b/src/services/Roles/RoleManagement.js
+@@ -1,31 +1 @@
+-import store from "../../store/store"
+-
+-class RoleManagement {
+-    getUserRole() {
+-        try {
+-            return store.getters.getUser?.priviliges || [];
+-        } catch {
+-            return [];
+-        }
+-    }
+-
+-    isExistRole(isRole) {
+-        let isExist = false;
+-        let roles = store.getters.getUser.priviliges.filter(role => role === isRole);
+-        if (roles.length > 0) {
+-            isExist = true;   
+-        }
+-        if (store.getters.getUser.priviliges.filter(role => role === "ROLE_ADMIN").length > 0) {
+-            isExist = true;   
+-        } 
+-        return isExist;
+-    }
+-
+-    hasAnyRole(requiredRoles = [], allowAdminOverride = true) {
+-        const roles = this.getUserRole();
+-        if (allowAdminOverride && roles.includes('ROLE_ADMIN')) return true;
+-        return requiredRoles.some(r => roles.includes(r));
+-    }
+-}
+-
+-export const roleManagement = new RoleManagement();
+\ No newline at end of file
++export { roleManagement } from "@/platform/guards/roleManagement";

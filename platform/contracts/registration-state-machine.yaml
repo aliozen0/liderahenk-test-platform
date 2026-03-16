@@ -1,0 +1,77 @@
+version: 1
+owner: registration-orchestrator
+
+actors:
+  - bootstrap_pipeline
+  - ldap
+  - ejabberd
+  - ahenk_agent
+  - liderapi
+  - liderui
+
+states:
+  bootstrap_seeded:
+    description: LDAP roots, config and XMPP admin identity are ready.
+  ldap_entry_ready:
+    description: Agent LDAP entry exists under agent_root.
+  xmpp_identity_ready:
+    description: ejabberd account exists for the agent.
+  register_sent:
+    description: Agent emitted official REGISTER message.
+  register_accepted:
+    description: Lider accepted registration response.
+  c_agent_ready:
+    description: Domain state exists in c_agent.
+  presence_online:
+    description: ejabberd sees the agent as connected.
+  domain_ready:
+    description: LDAP, XMPP, c_agent, dashboard and computer tree agree on identity.
+  drift_detected:
+    description: One or more projections disagree.
+
+transitions:
+  - from: bootstrap_seeded
+    to: ldap_entry_ready
+    actor: bootstrap_pipeline
+    check: ldap device entry exists
+  - from: bootstrap_seeded
+    to: xmpp_identity_ready
+    actor: bootstrap_pipeline
+    check: ejabberd account exists
+  - from:
+      - ldap_entry_ready
+      - xmpp_identity_ready
+    to: register_sent
+    actor: ahenk_agent
+    check: register log/event observed
+  - from: register_sent
+    to: register_accepted
+    actor: liderapi
+    check: registration response observed
+  - from: register_accepted
+    to: c_agent_ready
+    actor: liderapi
+    check: c_agent row exists
+  - from: c_agent_ready
+    to: presence_online
+    actor: ejabberd
+    check: connected_users contains agent jid
+  - from:
+      - ldap_entry_ready
+      - xmpp_identity_ready
+      - c_agent_ready
+      - presence_online
+    to: domain_ready
+    actor: registration-orchestrator
+    check: dashboard and computer tree counts agree
+  - from: domain_ready
+    to: drift_detected
+    actor: registration-orchestrator
+    check: any projection count or identity drift
+
+acceptance:
+  - AHENK_COUNT equals ldap_device_count
+  - AHENK_COUNT equals xmpp_registered_count minus admin identities
+  - AHENK_COUNT equals c_agent_count
+  - AHENK_COUNT equals dashboard.totalComputerNumber
+  - online count equals dashboard.totalOnlineComputerNumber

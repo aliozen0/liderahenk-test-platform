@@ -46,4 +46,5 @@ tests/ui/node_modules/
 tests/ui/test-results/
 tests/ui/playwright-report/
 
-docs/
+docs/*
+!docs/platform_vizyonu.md

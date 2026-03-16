@@ -29,6 +29,7 @@ ADMIN_DN     = f"cn={ADMIN_USER},{BASE_DN}"
 ADMIN_PASS   = os.environ["LDAP_ADMIN_PASSWORD"]
 
 AHENK_OU_DN  = os.environ.get("LDAP_AGENT_BASE_DN", f"ou=Ahenkler,{BASE_DN}")
+USERS_OU_DN = f"ou=users,{BASE_DN}"
 GROUPS_OU_DN = f"ou=Groups,{BASE_DN}"
 AGENT_GROUPS_OU_DN = f"ou=Agent,{GROUPS_OU_DN}"
 
@@ -268,6 +269,22 @@ def ensure_ou_ahenkler():
         conn.unbind()
 
 
+def ensure_user_tree():
+    """Kanonik kullanıcı subtree'sini oluştur."""
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        conn.add(USERS_OU_DN, "organizationalUnit", {"ou": "users"})
+        if conn.result["result"] == 0:
+            print(f"[provisioner] ✅ OU oluşturuldu: {USERS_OU_DN}")
+        elif conn.result["result"] == 68:
+            print(f"[provisioner] ℹ️  OU zaten mevcut: {USERS_OU_DN}")
+        else:
+            print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+    finally:
+        conn.unbind()
+
+
 def ensure_roles_ou():
     """ou=Roles OU'sunu ve liderahenk rol grubunu oluştur.
     example-registration plugin'i CSV'deki group sütununa göre
@@ -326,10 +343,11 @@ def ensure_roles_ou():
 
         # 4. Domain Admin grubu oluştur (LiderCore example-registration plugin için)
         admin_group_dn = f"cn=DomainAdmins,{roles_dn}"
+        admin_member_dn = f"uid={LIDER_ADMIN_UID},{USERS_OU_DN}"
         attrs_admin = {
             "objectClass": ["groupOfNames", "extensibleObject", "top"],
             "cn": "DomainAdmins",
-            "member": [reg_admin_dn, f"uid={LIDER_ADMIN_UID},{BASE_DN}"],
+            "member": [reg_admin_dn, admin_member_dn],
             "liderPrivilege": ["ROLE_DOMAIN_ADMIN"],
         }
         conn.add(admin_group_dn, attributes=attrs_admin)
@@ -438,6 +456,7 @@ def main():
     # otomatik olarak yönetiliyor (compose.core.yml). Provisioner sadece
     # ajan kaydı yapıyor.
 
+    ensure_user_tree()
     ensure_ou_ahenkler()
     ensure_group_tree()
     ensure_roles_ou()

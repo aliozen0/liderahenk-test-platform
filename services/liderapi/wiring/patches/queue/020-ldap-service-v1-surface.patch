@@ -1,0 +1,103 @@
+--- a/src/main/java/tr/org/lider/ldap/LDAPServiceImpl.java
++++ b/src/main/java/tr/org/lider/ldap/LDAPServiceImpl.java
+@@ -66,9 +66,11 @@
+ 
+ import tr.org.lider.entities.CommandImpl;
+ import tr.org.lider.message.service.IMessagingService;
++import tr.org.lider.message.service.XMPPMessagingService;
+ import tr.org.lider.messaging.enums.DomainType;
+ import tr.org.lider.security.User;
+ import tr.org.lider.services.AdService;
++import tr.org.lider.services.AgentPresenceService;
+ import tr.org.lider.services.AuthenticationService;
+ import tr.org.lider.services.CommandService;
+ import tr.org.lider.services.ConfigurationService;
+@@ -102,12 +104,51 @@
+ 	
+ 	@Autowired
+ 	private AdService adService;
++
++	@Autowired
++	private AgentPresenceService agentPresenceService;
+ 	
+ 	//	@Autowired
+ 	//	private Environment env;
+ 
+ 	private LdapConnectionPool pool;
+ 
++	private boolean isAgentOnline(LdapEntry ldapEntry) {
++		if (ldapEntry == null || ldapEntry.getUid() == null || ldapEntry.getUid().isBlank()) {
++			return false;
++		}
++
++		String uid = ldapEntry.getUid().trim();
++		if (agentPresenceService.isOnline(uid)) {
++			return true;
++		}
++
++		if (messagingService instanceof XMPPMessagingService xmppMessagingService) {
++			List<String> onlineUsers = xmppMessagingService.getOnlineUsers();
++			if (onlineUsers != null) {
++				if (onlineUsers.contains(uid)) {
++					return true;
++				}
++				String bareUid = uid.contains("@") ? uid.substring(0, uid.indexOf('@')) : uid;
++				if (onlineUsers.contains(bareUid)) {
++					return true;
++				}
++			}
++		}
++
++		if (messagingService.isRecipientOnline(uid)) {
++			return true;
++		}
++
++		String domain = System.getenv("XMPP_DOMAIN");
++		if (domain == null || domain.isBlank()) {
++			domain = "liderahenk.org";
++		}
++
++		String bareJid = uid.contains("@") ? uid : uid + "@" + domain;
++		return messagingService.isRecipientOnline(bareJid);
++	}
++
+ 	/**
+ 	 * Pattern for task privileges (e.g. [TASK:dc=mys,dc=pardus,dc=org:ALL],
+ 	 * [TASK:dc=mys,dc=pardus,dc=org:EXECUTE_SCRIPT] )
+@@ -202,9 +243,11 @@
+ 		LdapConnectionConfig lconfig = new LdapConnectionConfig();
+ 		lconfig.setLdapHost(configurationService.getLdapServer());
+ 		lconfig.setLdapPort(Integer.parseInt(configurationService.getLdapPort()));
+-		if (AuthenticationService.isLogged()) {
++		boolean forceAdminBind = "v1-broad".equalsIgnoreCase(System.getenv("LIDER_FEATURE_PROFILE"))
++				|| "1".equals(System.getenv("LIDER_FORCE_LDAP_ADMIN_BIND"));
++		if (!forceAdminBind && AuthenticationService.isLogged()) {
+ 			User user = AuthenticationService.getUser();
+-			if ( user != null) {
++			if ( user != null && user.getPassword() != null && !user.getPassword().isEmpty()) {
+ 				lconfig.setName(user.getDn());
+ 				lconfig.setCredentials(user.getPassword());
+ 			} else {
+@@ -788,7 +831,7 @@
+ 					LdapEntry ldapEntry= new LdapEntry(entry.getDn().toString(), attrs,attributesMultiValues, priviliges,convertObjectClass2DNType(entry.get("objectClass")));
+ 
+ 					if(ldapEntry.getType()==DNType.AHENK) {
+-						ldapEntry.setOnline(messagingService.isRecipientOnline(ldapEntry.getUid()));
++						ldapEntry.setOnline(isAgentOnline(ldapEntry));
+ 					}
+ 					result.add(ldapEntry);
+ 				}
+@@ -928,7 +971,7 @@
+ 					ldapEntry.setModifyDateStr(crtDateModify);
+ 					
+ 					if(ldapEntry.getType()==DNType.AHENK) {
+-						ldapEntry.setOnline(messagingService.isRecipientOnline(ldapEntry.getUid()));
++						ldapEntry.setOnline(isAgentOnline(ldapEntry));
+ 					}
+ 					result.add(ldapEntry);
+ 				}
+@@ -2798,4 +2841,3 @@
+ 	}
+ } 
+ 	
+-

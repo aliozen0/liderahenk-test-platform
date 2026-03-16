@@ -9,6 +9,8 @@ fi
 component="$1"
 ref="$2"
 repo_root="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
+manifest="$repo_root/platform/upstream-manifest.yaml"
+manifest_get="$repo_root/platform/scripts/manifest_get.sh"
 
 case "$component" in
     liderapi)
@@ -32,8 +34,10 @@ case "$component" in
         ;;
 esac
 
+acceptance_profile="$("$manifest_get" "$component" acceptance_profile "$manifest")"
+
 (
     cd "$repo_root"
     env "$env_name=$ref" docker compose --env-file .env $compose_args -p liderahenk-test build "$service"
-    PROFILE="${PROFILE:-v1-broad}" make test-acceptance PROFILE="${PROFILE:-v1-broad}"
+    PROFILE="${PROFILE:-$acceptance_profile}" make test-acceptance PROFILE="${PROFILE:-$acceptance_profile}"
 )

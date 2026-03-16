@@ -4,7 +4,7 @@
 > Tek komutla ayağa kalkar. Gerçek servisleri çalıştırır. Her şeyi test eder.
 
 ```bash
-make dev-obs   # Tüm sistem 8 dakikada hazır
+make dev-fidelity   # Kanonik kabul profili
 ```
 
 ---
@@ -38,7 +38,7 @@ Bu proje, LiderAhenk'i **gerçek bir sunucuya kurmak zorunda kalmadan** test ede
 
 | Sorun | Çözüm |
 |---|---|
-| LiderAhenk test etmek için gerçek Pardus sunucusu gerekiyor | `make dev` ile her şey dizüstü bilgisayarda çalışır |
+| LiderAhenk test etmek için gerçek Pardus sunucusu gerekiyor | `make dev-fast` ile her şey dizüstü bilgisayarda çalışır |
 | Yeni sürüm çıktı, bir şeyler bozuldu mu? | `make test-contract` 5 dakikada yanıt verir |
 | 100 ajan aynı anda bağlanabilir mi? | `make test-scale N=100` bunu ölçer |
 | Ağ kesilince mesaj kayboluyor mu? | Toxiproxy kaos testleri bunu kanıtlar (Oturum 8) |
@@ -86,10 +86,17 @@ Bu proje, LiderAhenk'i **gerçek bir sunucuya kurmak zorunda kalmadan** test ede
 
 | Katman | Sorumluluk |
 |---|---|
-| **L1 — Platform** | Docker ağları, servis izolasyonu, healthcheck'ler |
+| **L1 — Platform** | Docker ağları, bootstrap, registration orchestration, healthcheck'ler |
 | **L2 — Core** | Lider sunucusu, LDAP, ejabberd, MariaDB |
 | **L3 — Agents** | Provisioner + ölçeklenebilir Ahenk ajanları |
 | **L4 — Observability** | Metrik, log, trace toplama ve görselleştirme |
+
+### Çalışma Profilleri
+
+| Profil | Hedef | Komut |
+|---|---|---|
+| `dev-fast` | Hızlı geliştirme ve smoke testi | `make dev-fast` |
+| `dev-fidelity` | Stock kurulum paritesine en yakın kabul profili | `make dev-fidelity` |
 
 ---
 
@@ -166,10 +173,10 @@ make network-init
 
 ```bash
 # Temel sistem (Lider + 10 Ahenk)
-make dev
+make dev-fast
 
-# Gözlemlenebilirlik ile (Prometheus + Grafana + Loki)
-make dev-obs
+# Gözlemlenebilirlik ile (stock kurulum paritesine daha yakın)
+make dev-fidelity
 
 # Tüm profiller (tracing dahil)
 make dev-full
@@ -286,8 +293,8 @@ liderahenk-test/
 ```bash
 # ── Başlatma ──────────────────────────────────────────────────
 make network-init        # İlk kurulumda Docker ağlarını oluştur
-make dev                 # Core + Lider + 10 Ahenk
-make dev-obs             # + Prometheus + Grafana + Loki
+make dev-fast            # Hızlı geliştirme profili
+make dev-fidelity        # Gözlemlenebilirlik ile kabul profili
 make dev-full            # + Jaeger + OTel Collector
 make dev-scale N=50      # 50 Ahenk ajanı ile başlat
 
@@ -368,7 +375,7 @@ make test-integration
 ```bash
 # 50 ajan ile test
 make clean-hard
-AHENK_COUNT=50 make dev
+AHENK_COUNT=50 make dev-fast
 make test-scale N=50
 ```
 
@@ -542,6 +549,6 @@ LiderAhenk bileşenleri kendi lisanslarına tabidir.
 <div align="center">
 
 **Pardus LiderAhenk Test Platform**  
-`make dev-obs` → 8 dakika → Her şey hazır.
+`make dev-fidelity` → kabul profili hazır.
 
 </div>

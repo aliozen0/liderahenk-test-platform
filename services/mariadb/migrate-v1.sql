@@ -60,6 +60,20 @@ DEALLOCATE PREPARE stmt;
 UPDATE c_config
 SET value = JSON_SET(
     value,
+    '$.userLdapBaseDn',
+    CONCAT('ou=users,', JSON_UNQUOTE(JSON_EXTRACT(value, '$.ldapRootDn')))
+)
+WHERE name = 'liderConfigParams'
+  AND JSON_VALID(value)
+  AND JSON_EXTRACT(value, '$.ldapRootDn') IS NOT NULL
+  AND (
+      JSON_EXTRACT(value, '$.userLdapBaseDn') IS NULL
+      OR JSON_UNQUOTE(JSON_EXTRACT(value, '$.userLdapBaseDn')) = JSON_UNQUOTE(JSON_EXTRACT(value, '$.ldapRootDn'))
+  );
+
+UPDATE c_config
+SET value = JSON_SET(
+    value,
     '$.userGroupLdapBaseDn',
     JSON_UNQUOTE(JSON_EXTRACT(value, '$.groupLdapBaseDn'))
 )

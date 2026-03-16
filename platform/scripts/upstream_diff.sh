@@ -16,6 +16,7 @@ upstream_url="$("$manifest_get" "$component" upstream_url "$manifest")"
 upstream_ref="$("$manifest_get" "$component" upstream_ref "$manifest")"
 patch_queue_path="$("$manifest_get" "$component" patch_queue_path "$manifest")"
 extension_source_path="$("$manifest_get" "$component" extension_source_path "$manifest")"
+acceptance_profile="$("$manifest_get" "$component" acceptance_profile "$manifest")"
 
 remote_head="$(git ls-remote "$upstream_url" HEAD | awk '{print $1}')"
 
@@ -24,6 +25,7 @@ printf 'manifest_ref: %s\n' "$upstream_ref"
 printf 'remote_head: %s\n' "$remote_head"
 printf 'patch_queue_path: %s\n' "$patch_queue_path"
 printf 'extension_source_path: %s\n' "$extension_source_path"
+printf 'acceptance_profile: %s\n' "$acceptance_profile"
 
 if [ -d "$repo_root/$patch_queue_path" ]; then
     printf '\npatch files:\n'

@@ -1,0 +1,30 @@
+version: 1
+base_dn: dc=liderahenk,dc=org
+
+roots:
+  user_root:
+    dn: ou=users,dc=liderahenk,dc=org
+    description: End-user and admin account subtree.
+  user_group_root:
+    dn: ou=Groups,dc=liderahenk,dc=org
+    description: User group subtree.
+  agent_root:
+    dn: ou=Ahenkler,dc=liderahenk,dc=org
+    description: Agent device subtree.
+  agent_group_root:
+    dn: ou=Agent,ou=Groups,dc=liderahenk,dc=org
+    description: Computer group subtree used by policy assignment.
+  role_root:
+    dn: ou=Roles,dc=liderahenk,dc=org
+    description: Role and delegated registration subtree.
+
+bootstrap_requirements:
+  - user_root must exist before admin user creation.
+  - user_group_root and role_root must exist before UI group and policy flows.
+  - agent_root and agent_group_root must exist before provisioner registration.
+
+forbidden_models:
+  - name: domain_root_as_user_root
+    description: userLdapBaseDn cannot equal ldapRootDn.
+  - name: mixed_tree_roots
+    description: User and agent trees cannot share the same selector root.

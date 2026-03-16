@@ -7,6 +7,7 @@ export
 COMPOSE_CORE    = -f compose/compose.core.yml
 COMPOSE_LIDER   = -f compose/compose.lider.yml
 COMPOSE_AGENTS  = -f compose/compose.agents.yml
+COMPOSE_PLATFORM = -f compose/compose.platform.yml
 COMPOSE_OBS     = -f compose/compose.obs.yml
 COMPOSE_TRACING = -f compose/compose.tracing.yml
 COMPOSE_CMD     = docker compose --env-file .env
@@ -17,11 +18,13 @@ NETWORK_CORE    = $(PROJECT_NAME)_liderahenk_core
 NETWORK_AGENTS  = $(PROJECT_NAME)_liderahenk_agents
 NETWORK_OBS     = $(PROJECT_NAME)_liderahenk_obs
 NETWORK_EXTERNAL = $(PROJECT_NAME)_liderahenk_external
+PLATFORM_RUNTIME_PROFILE ?= dev-fast
+PROFILE ?= dev-fast
 
 # Default agent scale
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev dev-scale dev-obs dev-full build-lider build-agents build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e test-e2e-smoke test-e2e-management test-release-gate upstream-diff verify-candidate promote-candidate test-acceptance
+.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev-fast dev-fidelity dev dev-scale dev-obs dev-full build-lider build-agents build-platform build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e test-e2e-smoke test-e2e-management test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance
 
 ## Create external Docker networks required by compose overlays
 network-init:
@@ -70,6 +73,11 @@ build-agents:
 	@echo "Building agent images..."
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) build
 
+## Build platform support images
+build-platform:
+	@echo "Building platform support images..."
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) build registration-orchestrator
+
 ## Build observability images
 build-obs:
 	@echo "Building observability images..."
@@ -84,50 +92,62 @@ dev-lider:
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) ps
 
-## Start all services (core + lider + agent)
-dev:
-	@echo "Starting full platform..."
+## Start the fast development profile
+dev-fast:
+	@echo "Starting dev-fast platform..."
 	@$(MAKE) network-init
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
+	PLATFORM_RUNTIME_PROFILE=dev-fast $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
 	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) ps
+
+## Start the higher-fidelity acceptance profile
+dev-fidelity:
+	@echo "Starting dev-fidelity platform..."
+	@$(MAKE) network-init
+	PLATFORM_RUNTIME_PROFILE=dev-fidelity $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
+	@sleep 10
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) -p $(PROJECT_NAME) ps
+
+## Start all services (backward-compatible alias)
+dev:
+	@$(MAKE) dev-fast N=$(N)
 
 ## Start scaled agents (usage: make dev-scale N=20)
 dev-scale:
 	@echo "Starting full platform with ahenk x$(N)..."
 	@$(MAKE) network-init
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
+	PLATFORM_RUNTIME_PROFILE=$(PLATFORM_RUNTIME_PROFILE) $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) ps
 
 ## Stop all services
 stop:
 	@echo "Stopping services..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) down 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) down 2>/dev/null || \
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) down 2>/dev/null || \
 	$(COMPOSE_CMD) $(COMPOSE_CORE) -p $(PROJECT_NAME) down
 
 ## Remove containers + volumes
 clean:
 	@echo "Cleaning containers and volumes..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) down -v --remove-orphans 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) down -v --remove-orphans 2>/dev/null || \
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) down -v --remove-orphans 2>/dev/null || \
 	$(COMPOSE_CMD) $(COMPOSE_CORE) -p $(PROJECT_NAME) down -v --remove-orphans
 
 ## Hard cleanup including images
 clean-hard:
 	@echo "Performing hard cleanup..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) down -v --rmi all --remove-orphans 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) down -v --rmi all --remove-orphans 2>/dev/null || \
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) down -v --rmi all --remove-orphans 2>/dev/null || \
 	$(COMPOSE_CMD) $(COMPOSE_CORE) -p $(PROJECT_NAME) down -v --rmi all --remove-orphans
 
 ## Follow logs for a specific service (usage: make logs SVC=mariadb)
 logs:
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) logs -f $(SVC)
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) logs -f $(SVC)
 
 ## Docker compose status
 status:
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) ps
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) ps
 
 ## Contract tests - all adapters
 test-contract:
@@ -149,26 +169,22 @@ test-contract-xmpp:
 
 ## Start observability stack (core + lider + agent + obs)
 dev-obs:
-	@echo "Starting observability stack..."
-	@$(MAKE) network-init
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
-	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) ps
+	@$(MAKE) dev-fidelity N=$(N)
 
 ## Start full stack (core + lider + agent + obs + tracing)
 dev-full:
 	@echo "Starting full stack..."
 	@$(MAKE) network-init
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
+	PLATFORM_RUNTIME_PROFILE=dev-fidelity $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
 	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
 
 ## Stop all services including observability + tracing
 stop-all:
 	@echo "Stopping full stack..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) down 2>/dev/null || \
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) down 2>/dev/null || \
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) down
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) down 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) -p $(PROJECT_NAME) down 2>/dev/null || \
+	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) down
 
 ## Get JWT token
 token:
@@ -278,8 +294,14 @@ verify-candidate:
 promote-candidate:
 	./platform/scripts/promote_candidate.sh $(COMPONENT) $(REF)
 
+## Audit tracked patch surface against the inventory
+audit-platform:
+	chmod +x ./platform/scripts/audit_patch_surface.sh
+	./platform/scripts/audit_patch_surface.sh
+
 ## Run the platform acceptance profile
 test-acceptance:
 	@echo "Running acceptance profile ($(PROFILE))..."
+	@if [ "$(PROFILE)" != "dev-fast" ] && [ "$(PROFILE)" != "dev-fidelity" ]; then echo "Unsupported acceptance profile: $(PROFILE)"; exit 1; fi
 	$(MAKE) test-contract
 	$(MAKE) run-scenario S=policy_roundtrip.yml

@@ -1,0 +1,68 @@
+version: 1
+goal: externalized_test_platform
+
+runtime_profiles:
+  dev-fast:
+    description: Container-only hizli gelistirme ve smoke testi profili.
+    compose_stack:
+      - compose/compose.core.yml
+      - compose/compose.lider.yml
+      - compose/compose.agents.yml
+      - compose/compose.platform.yml
+    observability: basic
+    agent_runtime: container
+  dev-fidelity:
+    description: Stock kurulum paritesine en yakin kabul profili.
+    compose_stack:
+      - compose/compose.core.yml
+      - compose/compose.lider.yml
+      - compose/compose.agents.yml
+      - compose/compose.platform.yml
+      - compose/compose.obs.yml
+    observability: full
+    agent_runtime: container_now_vm_ready_later
+
+config_sources:
+  bootstrap_env:
+    - .env
+    - .env.example
+  runtime_truth:
+    - c_config
+    - ldap
+    - ejabberd
+
+ldap_roots:
+  user_root: ou=users,dc=liderahenk,dc=org
+  user_group_root: ou=Groups,dc=liderahenk,dc=org
+  agent_root: ou=Ahenkler,dc=liderahenk,dc=org
+  agent_group_root: ou=Agent,ou=Groups,dc=liderahenk,dc=org
+  role_root: ou=Roles,dc=liderahenk,dc=org
+
+bootstrap_pipeline:
+  - step: initialize_core_datastores
+    owner: compose.core
+  - step: load_ldap_schema_and_roots
+    owner: ldap-init
+  - step: seed_runtime_config
+    owner: mariadb_init
+  - step: provision_agents
+    owner: provisioner
+  - step: start_registration_orchestrator
+    owner: platform
+
+seed_sets:
+  users:
+    - lider-admin
+  groups:
+    - Groups
+    - Agent
+  roles:
+    - liderahenk
+    - DomainAdmins
+  agents:
+    source: AHENK_COUNT
+
+acceptance_targets:
+  - contract_tests
+  - policy_roundtrip
+  - registration_consistency

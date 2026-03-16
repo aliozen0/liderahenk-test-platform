@@ -1,0 +1,81 @@
+version: 1
+source_of_truth:
+  directory: ldap
+  agent_inventory: liderapi_domain_state
+  presence: xmpp
+
+field_semantics:
+  dn:
+    description: Immutable LDAP distinguished name.
+    allowed_usage:
+      - request.selected_dn
+      - response.distinguishedName
+      - membership references
+  uid:
+    description: Human meaningful leaf identifier, never a DN carrier.
+    forbidden_usage:
+      - dn_transport
+      - subtree_selector
+  type:
+    description: Domain node classification used by UI tree and task dispatch.
+    allowed_values:
+      - OU
+      - USER
+      - USER_GROUP
+      - AHENK
+      - WINDOWS_AHENK
+      - AGENT_GROUP
+
+entities:
+  DirectoryUser:
+    owner: ldap
+    root_contract: user_root
+    required_fields:
+      - dn
+      - uid
+      - cn
+    object_classes:
+      - pardusAccount
+      - pardusLider
+  DirectoryGroup:
+    owner: ldap
+    root_contract: user_group_root
+    required_fields:
+      - dn
+      - cn
+      - member_dns
+    object_classes:
+      - groupOfNames
+  AgentNode:
+    owner: ldap_plus_domain_state
+    root_contract: agent_root
+    required_fields:
+      - dn
+      - uid
+      - cn
+      - hostname
+      - type
+    object_classes:
+      - pardusDevice
+      - device
+    runtime_state:
+      - ldap_entry_ready
+      - xmpp_identity_ready
+      - c_agent_ready
+      - presence_online
+  AgentGroup:
+    owner: ldap
+    root_contract: agent_group_root
+    required_fields:
+      - dn
+      - cn
+      - member_dns
+    object_classes:
+      - groupOfNames
+      - pardusDeviceGroup
+
+invariants:
+  - uid is never used as distinguished name transport.
+  - user, user-group, computer and computer-group trees use separate roots.
+  - presence does not create agents; it only marks runtime connectivity.
+  - dashboard counts are derived from domain state, not ad-hoc tree heuristics.

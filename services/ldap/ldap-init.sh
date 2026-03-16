@@ -15,6 +15,7 @@ LDAP_PORT="${LDAP_PORT:-1389}"
 LDAP_BASE_DN="${LDAP_BASE_DN:-dc=liderahenk,dc=org}"
 LDAP_ADMIN_DN="cn=${LDAP_ADMIN_USERNAME:-admin},${LDAP_BASE_DN}"
 LDAP_ADMIN_PW="${LDAP_ADMIN_PASSWORD:-DEGISTIR}"
+LDAP_USERS_OU="${LDAP_USERS_OU:-ou=users,${LDAP_BASE_DN}}"
 LIDER_ADMIN_UID="${LIDER_ADMIN_UID:-lider-admin}"
 LIDER_ADMIN_PASS="${LIDER_ADMIN_PASS:-secret}"
 
@@ -44,6 +45,17 @@ else
 fi
 
 # ─── Adım 2: Admin Kullanıcısı (SSHA) ─────────────────────
+echo "[ldap-init] Kullanıcı OU kontrol ediliyor..."
+cat > /tmp/users-ou.ldif << EOF
+dn: ${LDAP_USERS_OU}
+objectClass: organizationalUnit
+ou: users
+EOF
+
+ldapadd -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" -f /tmp/users-ou.ldif 2>&1 || {
+  echo "[ldap-init] ℹ️  Kullanıcı OU zaten mevcut"
+}
+
 echo "[ldap-init] Admin kullanıcısı kontrol ediliyor..."
 
 # SSHA hash oluştur (Python gerekli)
@@ -55,12 +67,12 @@ sha1 = hashlib.sha1(password.encode('utf-8') + salt).digest()
 print('{SSHA}' + base64.b64encode(sha1 + salt).decode())
 ")
 
-ADMIN_EXISTS=$(ldapsearch -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" -b "uid=${LIDER_ADMIN_UID},${LDAP_BASE_DN}" "(uid=${LIDER_ADMIN_UID})" dn 2>/dev/null | grep -c "numEntries" || true)
+ADMIN_EXISTS=$(ldapsearch -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" -b "${LDAP_USERS_OU}" "(uid=${LIDER_ADMIN_UID})" dn 2>/dev/null | grep -c "numEntries" || true)
 
 if [ "$ADMIN_EXISTS" = "0" ] || [ -z "$ADMIN_EXISTS" ]; then
-  echo "[ldap-init] Admin kullanıcısı oluşturuluyor: uid=${LIDER_ADMIN_UID},${LDAP_BASE_DN}"
+  echo "[ldap-init] Admin kullanıcısı oluşturuluyor: uid=${LIDER_ADMIN_UID},${LDAP_USERS_OU}"
   cat > /tmp/admin-user.ldif << EOF
-dn: uid=${LIDER_ADMIN_UID},${LDAP_BASE_DN}
+dn: uid=${LIDER_ADMIN_UID},${LDAP_USERS_OU}
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person
@@ -83,7 +95,7 @@ EOF
 else
   echo "[ldap-init] ℹ️  Admin kullanıcısı mevcut — şifre SSHA ile güncelleniyor..."
   cat > /tmp/update-password.ldif << EOF
-dn: uid=${LIDER_ADMIN_UID},${LDAP_BASE_DN}
+dn: uid=${LIDER_ADMIN_UID},${LDAP_USERS_OU}
 changetype: modify
 replace: userPassword
 userPassword: ${SSHA_HASH}
@@ -94,7 +106,7 @@ fi
 
 # ─── Doğrulama ─────────────────────────────────────────────
 echo "[ldap-init] LDAP bind doğrulaması..."
-BIND_RESULT=$(ldapwhoami -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "uid=${LIDER_ADMIN_UID},${LDAP_BASE_DN}" -w "${LIDER_ADMIN_PASS}" 2>&1)
+BIND_RESULT=$(ldapwhoami -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "uid=${LIDER_ADMIN_UID},${LDAP_USERS_OU}" -w "${LIDER_ADMIN_PASS}" 2>&1)
 if echo "$BIND_RESULT" | grep -q "dn:"; then
   echo "[ldap-init] ✅ LDAP bind başarılı: $BIND_RESULT"
 else
