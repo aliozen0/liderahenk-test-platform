@@ -12,6 +12,7 @@ from adapters.interfaces import (
 )
 from adapters.ldap_schema_adapter import LdapSchemaAdapter
 from adapters.lider_api_adapter import LiderApiAdapter
+from adapters.runtime_db_adapter import RuntimeDbAdapter
 from adapters.xmpp_message_adapter import XmppMessageAdapter
 
 
@@ -23,15 +24,17 @@ class PlatformAdapterBundle:
     tasks: TaskDispatchAdapter
     policies: PolicyDispatchAdapter
     lider_api: LiderApiAdapter
+    runtime_db: RuntimeDbAdapter
 
 
 def _resolve_host_urls() -> tuple[str, str]:
     api_url = os.environ.get("LIDER_API_HOST_URL", os.environ.get("LIDER_API_URL", "http://localhost:8082"))
-    if "liderapi:8080" in api_url:
+    container_context = os.environ.get("PLATFORM_EXECUTION_CONTEXT") == "container"
+    if not container_context and "liderapi:8080" in api_url:
         api_url = "http://localhost:8082"
 
     ejabberd_url = os.environ.get("EJABBERD_API_HOST", os.environ.get("EJABBERD_API_URL", "http://localhost:15280/api"))
-    if "ejabberd:5280" in ejabberd_url:
+    if not container_context and "ejabberd:5280" in ejabberd_url:
         ejabberd_url = "http://localhost:15280/api"
     return api_url, ejabberd_url
 
@@ -63,4 +66,5 @@ def build_platform_bundle() -> PlatformAdapterBundle:
         tasks=lider_api,
         policies=lider_api,
         lider_api=lider_api,
+        runtime_db=RuntimeDbAdapter.from_env(),
     )

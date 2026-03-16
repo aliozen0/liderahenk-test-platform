@@ -20,11 +20,14 @@ NETWORK_OBS     = $(PROJECT_NAME)_liderahenk_obs
 NETWORK_EXTERNAL = $(PROJECT_NAME)_liderahenk_external
 PLATFORM_RUNTIME_PROFILE ?= dev-fast
 PROFILE ?= dev-fast
+BASELINE_ROOT ?= platform/baselines/golden-install
+BASELINE_ENV_FILE ?=
+BASELINE_SOURCE_LABEL ?=
 
 # Default agent scale
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev-fast dev-fidelity dev dev-scale dev-obs dev-full build-lider build-agents build-platform build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e test-e2e-smoke test-e2e-management test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance
+.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev-fast dev-fidelity dev dev-scale dev-obs dev-full build-lider build-agents build-platform build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-runtime-core test-runtime-operational test-runtime-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e test-e2e-smoke test-e2e-management test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance validate-golden-baseline capture-golden-baseline test-registration-parity diff-baseline validate-registration-evidence
 
 ## Create external Docker networks required by compose overlays
 network-init:
@@ -96,17 +99,13 @@ dev-lider:
 dev-fast:
 	@echo "Starting dev-fast platform..."
 	@$(MAKE) network-init
-	PLATFORM_RUNTIME_PROFILE=dev-fast $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
-	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) ps
+	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=dev-fast PYTHONPATH=. python3 platform/scripts/bootstrap_runtime.py --profile dev-fast --agents $(N) --project-name $(PROJECT_NAME)
 
 ## Start the higher-fidelity acceptance profile
 dev-fidelity:
 	@echo "Starting dev-fidelity platform..."
 	@$(MAKE) network-init
-	PLATFORM_RUNTIME_PROFILE=dev-fidelity $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
-	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) -p $(PROJECT_NAME) ps
+	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=dev-fidelity PYTHONPATH=. python3 platform/scripts/bootstrap_runtime.py --profile dev-fidelity --agents $(N) --project-name $(PROJECT_NAME)
 
 ## Start all services (backward-compatible alias)
 dev:
@@ -116,7 +115,7 @@ dev:
 dev-scale:
 	@echo "Starting full platform with ahenk x$(N)..."
 	@$(MAKE) network-init
-	PLATFORM_RUNTIME_PROFILE=$(PLATFORM_RUNTIME_PROFILE) $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
+	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=$(PLATFORM_RUNTIME_PROFILE) $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) ps
 
@@ -175,7 +174,7 @@ dev-obs:
 dev-full:
 	@echo "Starting full stack..."
 	@$(MAKE) network-init
-	PLATFORM_RUNTIME_PROFILE=dev-fidelity $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
+	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=dev-fidelity $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
 	@sleep 10
 	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
 
@@ -245,6 +244,57 @@ quality-report:
 	@$(MAKE) install-test-deps
 	PYTHONPATH=. python3 scripts/generate_quality_report.py
 
+## Validate docker/runtime readiness for the selected profile
+test-runtime-core:
+	@echo "Running runtime core checks ($(PROFILE))..."
+	@if [ "$(PROFILE)" != "dev-fast" ] && [ "$(PROFILE)" != "dev-fidelity" ]; then echo "Unsupported runtime profile: $(PROFILE)"; exit 1; fi
+	@$(MAKE) install-test-deps
+	AHENK_COUNT=$(N) PYTHONPATH=. PLATFORM_RUNTIME_PROFILE=$(PROFILE) python3 platform/scripts/validate_runtime_core.py
+
+## Validate operational runtime flows for the higher-fidelity profile
+test-runtime-operational:
+	@echo "Running runtime operational checks ($(PROFILE))..."
+	@if [ "$(PROFILE)" != "dev-fidelity" ]; then echo "test-runtime-operational requires PROFILE=dev-fidelity"; exit 1; fi
+	@$(MAKE) install-test-deps
+	python3 -m playwright install chromium
+	AHENK_COUNT=$(N) PYTHONPATH=. PLATFORM_RUNTIME_PROFILE=$(PROFILE) python3 platform/scripts/validate_runtime_operational.py
+
+## Run scale acceptance using the runtime-first target name
+test-runtime-scale:
+	@echo "Running runtime scale acceptance (N=$(N))..."
+	@$(MAKE) test-scale N=$(N)
+
+## Validate the committed golden baseline registry
+validate-golden-baseline:
+	@echo "Validating golden baseline..."
+	@$(MAKE) install-test-deps
+	PYTHONPATH=. python3 platform/scripts/validate_golden_baseline.py $(BASELINE_ROOT)
+
+## Capture a golden baseline from the active runtime
+capture-golden-baseline:
+	@echo "Capturing golden baseline..."
+	@$(MAKE) install-test-deps
+	PYTHONPATH=. python3 platform/scripts/capture_golden_baseline.py $(BASELINE_ROOT) $(if $(BASELINE_ENV_FILE),--env-file $(BASELINE_ENV_FILE),) $(if $(BASELINE_SOURCE_LABEL),--source-label "$(BASELINE_SOURCE_LABEL)",)
+
+## Run exact registration parity checks
+test-registration-parity:
+	@echo "Running registration parity checks..."
+	@$(MAKE) install-test-deps
+	AHENK_COUNT=$(N) PYTHONPATH=. pytest tests/test_registration_parity.py -v --timeout=120
+
+## Compare live runtime state with the golden baseline
+diff-baseline:
+	@echo "Diffing live runtime against golden baseline..."
+	@$(MAKE) install-test-deps
+	@$(MAKE) validate-golden-baseline BASELINE_ROOT=$(BASELINE_ROOT)
+	PYTHONPATH=. python3 platform/scripts/diff_baseline.py $(BASELINE_ROOT)
+
+## Validate platform registration evidence bundle
+validate-registration-evidence:
+	@echo "Validating registration evidence..."
+	@$(MAKE) install-test-deps
+	PYTHONPATH=. python3 platform/scripts/validate_registration_evidence.py
+
 ## Run scenario (usage: make run-scenario S=registration_test.yml)
 run-scenario:
 	@$(MAKE) install-test-deps
@@ -277,6 +327,12 @@ test-e2e-management:
 ## Run a release-oriented quality gate
 test-release-gate:
 	@echo "Running release gate..."
+	@$(MAKE) test-runtime-core PROFILE=$(PROFILE)
+	@$(MAKE) test-runtime-operational PROFILE=$(PROFILE)
+	@$(MAKE) validate-golden-baseline
+	@$(MAKE) test-acceptance PROFILE=$(PROFILE)
+	@$(MAKE) diff-baseline PROFILE=$(PROFILE)
+	@$(MAKE) validate-registration-evidence
 	@$(MAKE) test-observability
 	@$(MAKE) test-evidence
 	@$(MAKE) test-e2e-smoke
@@ -304,4 +360,6 @@ test-acceptance:
 	@echo "Running acceptance profile ($(PROFILE))..."
 	@if [ "$(PROFILE)" != "dev-fast" ] && [ "$(PROFILE)" != "dev-fidelity" ]; then echo "Unsupported acceptance profile: $(PROFILE)"; exit 1; fi
 	$(MAKE) test-contract
+	$(MAKE) test-runtime-core PROFILE=$(PROFILE)
+	$(MAKE) test-registration-parity
 	$(MAKE) run-scenario S=policy_roundtrip.yml

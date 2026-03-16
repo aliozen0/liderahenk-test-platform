@@ -1,0 +1,22 @@
+version: 1
+owner: registration-orchestrator
+
+classes:
+  bootstrap_failure:
+    severity: error
+    description: A required platform dependency or bootstrap precondition is unavailable.
+  config_drift:
+    severity: error
+    description: Runtime config fingerprints drift from the canonical baseline.
+  registration_timeout:
+    severity: error
+    description: Registration did not converge to expected domain state before timeout.
+  registration_projection_mismatch:
+    severity: error
+    description: LDAP, XMPP, c_agent, dashboard or computer tree disagree on identities or counts.
+  adapter_error:
+    severity: error
+    description: An adapter call failed while collecting truth from a runtime surface.
+  ui_parity_break:
+    severity: warn
+    description: UI evidence or surface shape drifted from the baseline.

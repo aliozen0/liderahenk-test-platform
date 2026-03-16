@@ -19,6 +19,8 @@ services:
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_USER_BASE_DN: ${LDAP_USER_BASE_DN:-ou=users,dc=liderahenk,dc=org}
+      LDAP_ROLE_BASE_DN: ${LDAP_ROLE_BASE_DN:-ou=Roles,dc=liderahenk,dc=org}
       LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       XMPP_DOMAIN: ${XMPP_DOMAIN}
@@ -56,6 +58,7 @@ services:
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_USER_BASE_DN: ${LDAP_USER_BASE_DN:-ou=users,dc=liderahenk,dc=org}
       JITTER_MAX_SECONDS: ${JITTER_MAX_SECONDS}
       XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
       XMPP_AGENT_PASS: ${XMPP_AGENT_PASS}

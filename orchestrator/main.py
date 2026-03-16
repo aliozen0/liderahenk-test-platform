@@ -9,7 +9,6 @@ import os
 import sys
 import time
 import yaml
-import json
 import logging
 from pathlib import Path
 
@@ -17,6 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from adapters import build_platform_bundle
+from platform_runtime.registration import flatten_tree_agent_ids
+from platform_runtime.runtime_db import RuntimeDbAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class ScenarioRunner:
         self.api = bundle.lider_api
         self.xmpp = bundle.presence
         self.ldap = bundle.directory
+        self.runtime_db = RuntimeDbAdapter.from_env()
 
         self.ahenk_count = int(os.environ.get("AHENK_COUNT", "10"))
         self.state = {}
@@ -80,6 +82,8 @@ class ScenarioRunner:
         s = str(value)
         if "${AHENK_COUNT}" in s:
             s = s.replace("${AHENK_COUNT}", str(self.ahenk_count))
+        if "${LAST_AGENT_ID}" in s:
+            s = s.replace("${LAST_AGENT_ID}", f"ahenk-{self.ahenk_count:03d}")
         return s
 
     def _execute_step(self, step: dict) -> dict:
@@ -107,12 +111,41 @@ class ScenarioRunner:
                 total = self.xmpp.get_registered_count()
                 # lider_sunucu'yu çıkar
                 actual = total - 1 if total > 0 else 0
-                ok = actual >= expected
+                ok = actual == expected
                 return {"success": ok, "detail": f"{actual}/{expected} ajan",
                         "actual": actual, "expected": expected}
 
+            elif action == "check_c_agent_count":
+                expected = int(self._resolve_var(params["expected"]))
+                actual = self.runtime_db.get_c_agent_count()
+                ok = actual == expected
+                return {"success": ok, "detail": f"{actual}/{expected} c_agent",
+                        "actual": actual, "expected": expected}
+
+            elif action == "check_domain_agent_count":
+                expected = int(self._resolve_var(params["expected"]))
+                actual = len(self.api.get_agent_list())
+                ok = actual == expected
+                return {"success": ok, "detail": f"{actual}/{expected} domain ajan",
+                        "actual": actual, "expected": expected}
+
+            elif action == "check_dashboard_total":
+                expected = int(self._resolve_var(params["expected"]))
+                dashboard = self.api.get_dashboard_info() or {}
+                actual = int(dashboard.get("totalComputerNumber") or 0)
+                ok = actual == expected
+                return {"success": ok, "detail": f"{actual}/{expected} dashboard total",
+                        "actual": actual, "expected": expected}
+
+            elif action == "check_computer_tree_count":
+                expected = int(self._resolve_var(params["expected"]))
+                actual = len(flatten_tree_agent_ids(self.api.get_computer_tree()))
+                ok = actual == expected
+                return {"success": ok, "detail": f"{actual}/{expected} tree ajan",
+                        "actual": actual, "expected": expected}
+
             elif action == "check_agent_exists":
-                agent_id = params["agent_id"]
+                agent_id = self._resolve_var(params["agent_id"])
                 ldap_ok = self.ldap.agent_exists(agent_id) if params.get("check_ldap") else True
                 xmpp_ok = self.xmpp.is_user_registered(agent_id) if params.get("check_xmpp") else True
                 ok = ldap_ok and xmpp_ok

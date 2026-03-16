@@ -1,0 +1,59 @@
+version: 1
+owner: registration-orchestrator
+
+required_artifacts:
+  - run-manifest.json
+  - registration-verdict.json
+  - registration-events.jsonl
+  - failure-summary.json
+
+run_manifest_required_fields:
+  - schemaVersion
+  - runId
+  - runtimeProfile
+  - expectedAgents
+  - startedAt
+  - timeoutSeconds
+  - backoff
+
+registration_verdict_required_fields:
+  - schemaVersion
+  - runId
+  - status
+  - runtimeProfile
+  - expectedAgents
+  - checks
+  - taxonomy
+  - surfaces
+  - perAgent
+  - capturedAt
+
+failure_summary_required_fields:
+  - schemaVersion
+  - runId
+  - status
+  - capturedAt
+  - failedChecks
+  - taxonomy
+
+registration_event_required_fields:
+  - runId
+  - attempt
+  - phase
+  - status
+  - failedChecks
+  - taxonomy
+  - capturedAt
+
+event_phases:
+  - settle
+  - timeout
+  - steady-state
+
+registration_states:
+  - ldap_entry_ready
+  - xmpp_identity_ready
+  - register_sent
+  - register_accepted
+  - c_agent_ready
+  - domain_ready

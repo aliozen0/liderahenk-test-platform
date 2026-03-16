@@ -56,9 +56,9 @@ seed_sets:
   groups:
     - Groups
     - Agent
+    - DomainAdmins
   roles:
     - liderahenk
-    - DomainAdmins
   agents:
     source: AHENK_COUNT
 

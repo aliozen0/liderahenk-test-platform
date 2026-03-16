@@ -11,6 +11,8 @@ import os
 import sys
 import time
 import subprocess
+import hashlib
+import base64
 import ldap3
 import requests
 
@@ -29,7 +31,8 @@ ADMIN_DN     = f"cn={ADMIN_USER},{BASE_DN}"
 ADMIN_PASS   = os.environ["LDAP_ADMIN_PASSWORD"]
 
 AHENK_OU_DN  = os.environ.get("LDAP_AGENT_BASE_DN", f"ou=Ahenkler,{BASE_DN}")
-USERS_OU_DN = f"ou=users,{BASE_DN}"
+USERS_OU_DN = os.environ.get("LDAP_USER_BASE_DN", f"ou=users,{BASE_DN}")
+ROLES_OU_DN = os.environ.get("LDAP_ROLE_BASE_DN", f"ou=Roles,{BASE_DN}")
 GROUPS_OU_DN = f"ou=Groups,{BASE_DN}"
 AGENT_GROUPS_OU_DN = f"ou=Agent,{GROUPS_OU_DN}"
 
@@ -72,6 +75,28 @@ LIDERAHENK_SCHEMA_ATTRS = {
 # Admin kullanıcısı — JWT auth için
 LIDER_ADMIN_UID = os.environ.get("LIDER_ADMIN_UID", "lider-admin")
 LIDER_ADMIN_PASS = os.environ.get("LIDER_ADMIN_PASS", "secret")
+
+
+def _user_dn(uid: str) -> str:
+    return f"uid={uid},{USERS_OU_DN}"
+
+
+def _role_dn(cn: str) -> str:
+    return f"cn={cn},{ROLES_OU_DN}"
+
+
+def _group_dn(cn: str) -> str:
+    return f"cn={cn},{GROUPS_OU_DN}"
+
+
+def _agent_owner_dn() -> str:
+    return _user_dn(LIDER_ADMIN_UID)
+
+
+def _ssha_hash(password: str) -> str:
+    salt = os.urandom(8)
+    sha1_digest = hashlib.sha1(password.encode("utf-8") + salt).digest()
+    return "{SSHA}" + base64.b64encode(sha1_digest + salt).decode("ascii")
 
 
 def wait_for_ldap():
@@ -202,22 +227,16 @@ olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.2 NAME 'pardusLider' AUXILIARY MAY ( 
     return False
 
 
-import hashlib
-import os
-
 def create_lider_admin_user():
     """liderapi JWT auth için admin kullanıcısı oluştur (idempotent).
     pardusAccount + pardusLider objectClass gerekli.
     Şifre SSHA formatında hash'lenir — OpenLDAP bind uyumlu."""
-    admin_dn = f"uid={LIDER_ADMIN_UID},{BASE_DN}"
+    admin_dn = _user_dn(LIDER_ADMIN_UID)
     print(f"[provisioner] Admin kullanıcısı oluşturuluyor: {admin_dn}")
 
     # SSHA hash oluşturma (OpenLDAP bind uyumlu)
     try:
-        salt = os.urandom(8)
-        sha1_digest = hashlib.sha1(LIDER_ADMIN_PASS.encode("utf-8") + salt).digest()
-        import base64
-        ssha_hash = "{SSHA}" + base64.b64encode(sha1_digest + salt).decode("ascii")
+        ssha_hash = _ssha_hash(LIDER_ADMIN_PASS)
     except Exception as e:
         print(f"[provisioner] ⚠️  Şifre hash'leme hatası: {e}")
         return False
@@ -289,29 +308,28 @@ def ensure_roles_ou():
     """ou=Roles OU'sunu ve liderahenk rol grubunu oluştur.
     example-registration plugin'i CSV'deki group sütununa göre
     bu OU altında rol grubu arar."""
-    roles_dn = f"ou=Roles,{BASE_DN}"
-    role_group_dn = f"cn=liderahenk,{roles_dn}"
+    role_group_dn = _role_dn("liderahenk")
+    admin_group_dn = _group_dn("DomainAdmins")
 
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
         # 1. ou=Roles oluştur
-        conn.add(roles_dn, "organizationalUnit", {"ou": "Roles"})
+        conn.add(ROLES_OU_DN, "organizationalUnit", {"ou": "Roles"})
         if conn.result["result"] == 0:
-            print(f"[provisioner] ✅ OU oluşturuldu: {roles_dn}")
+            print(f"[provisioner] ✅ OU oluşturuldu: {ROLES_OU_DN}")
         elif conn.result["result"] == 68:
-            print(f"[provisioner] ℹ️  OU zaten mevcut: {roles_dn}")
+            print(f"[provisioner] ℹ️  OU zaten mevcut: {ROLES_OU_DN}")
         else:
             print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
 
         # 2. liderahenk rol grubu oluştur
-        # example-registration plugin sudoUser attribute ile yetkilendirme yapar
-        # extensibleObject → herhangi bir attribute kullanmaya izin verir
+        # Registration yetkilendirmesi agent identity (istemci) uzerinden izlenir.
         sudo_users = [f"ahenk-{i:03d}" for i in range(1, N + 1)]
         sudo_hosts = [f"ahenk-{i:03d}-host" for i in range(1, N + 1)]
 
         attrs = {
-            "objectClass": ["organizationalRole", "extensibleObject", "top"],
+            "objectClass": ["sudoRole", "top"],
             "cn": "liderahenk",
             "description": "LiderAhenk test agent role group",
             "sudoUser": sudo_users,
@@ -324,39 +342,24 @@ def ensure_roles_ou():
         elif conn.result["result"] == 68:
             print(f"[provisioner] ℹ️  Rol grubu zaten mevcut: {role_group_dn}")
         else:
-            print(f"[provisioner] ⚠️  Rol grubu oluşturma sonucu: {conn.result}")
-        # 3. Domain Admin grubu oluştur (LiderCore example-registration plugin için)
-        # 3. Dedicated Registration Admin user in ou=Roles
-        reg_admin_dn = f"uid=lider-reg,{roles_dn}"
-        ssha_hash = "secret"
-            
-        attrs_reg = {
-            "objectClass": ["inetOrgPerson", "organizationalPerson", "person", "pardusAccount", "pardusLider", "top"],
-            "uid": "lider-reg",
-            "cn": "Registration Admin",
-            "sn": "Admin",
-            "userPassword": ssha_hash,
-            "mail": "reg@liderahenk.org",
-            "liderPrivilege": ["ROLE_DOMAIN_ADMIN"],
-        }
-        conn.add(reg_admin_dn, attributes=attrs_reg)
+            raise RuntimeError(f"Rol grubu oluşturma hatası: {conn.result}")
 
-        # 4. Domain Admin grubu oluştur (LiderCore example-registration plugin için)
-        admin_group_dn = f"cn=DomainAdmins,{roles_dn}"
-        admin_member_dn = f"uid={LIDER_ADMIN_UID},{USERS_OU_DN}"
+        # 3. Domain admin yetkisi user-group root altinda tutulur.
+        admin_member_dn = _user_dn(LIDER_ADMIN_UID)
         attrs_admin = {
-            "objectClass": ["groupOfNames", "extensibleObject", "top"],
+            "objectClass": ["groupOfNames", "pardusLider", "top"],
             "cn": "DomainAdmins",
-            "member": [reg_admin_dn, admin_member_dn],
+            "member": [admin_member_dn],
             "liderPrivilege": ["ROLE_DOMAIN_ADMIN"],
+            "liderGroupType": ["USER"],
         }
         conn.add(admin_group_dn, attributes=attrs_admin)
         if conn.result["result"] == 0:
-            print(f"[provisioner] ✅ Domain Admin grubu & Lider-Reg oluşturuldu")
+            print(f"[provisioner] ✅ Domain Admin rol baglantisi oluşturuldu: {admin_group_dn}")
         elif conn.result["result"] == 68:
-            print(f"[provisioner] ℹ️  Domain Admin/Lider-Reg grubu zaten mevcut")
+            print(f"[provisioner] ℹ️  Domain Admin rol baglantisi zaten mevcut: {admin_group_dn}")
         else:
-            print(f"[provisioner] ⚠️  Domain Admin oluşturma sonucu: {conn.result}")
+            raise RuntimeError(f"Domain Admin rol baglantisi hatası: {conn.result}")
 
     finally:
         conn.unbind()
@@ -414,7 +417,7 @@ def register_ldap_idempotent(index):
             "cn": cn,
             "uid": agent_id,
             "userPassword": XMPP_PASS,
-            "owner": ADMIN_DN,
+            "owner": _agent_owner_dn(),
         }
         conn.add(dn, attributes=attrs)
         if conn.result["result"] == 0:
@@ -428,15 +431,18 @@ def register_ldap_idempotent(index):
 
 
 def verify_registrations():
-    """LDAP'ta N kayıt var mı doğrula."""
+    """LDAP'ta tam olarak N kayıt var mı doğrula."""
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
         conn.search(AHENK_OU_DN, "(objectClass=device)", search_scope=ldap3.SUBTREE)
         count = len(conn.entries)
         print(f"[provisioner] LDAP doğrulama: {count} kayıt bulundu (beklenen: {N})")
-        if count < N:
-            raise RuntimeError(f"Kayıt doğrulama başarısız: {count}/{N} kayıt")
+        if count != N:
+            raise RuntimeError(
+                f"Kayıt doğrulama başarısız: actual={count} expected={N}. "
+                "Dirty LDAP/XMPP state cleanup or fresh environment is required."
+            )
         return count
     finally:
         conn.unbind()

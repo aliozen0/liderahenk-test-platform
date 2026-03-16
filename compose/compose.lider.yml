@@ -28,6 +28,8 @@ services:
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_USER_BASE_DN: ${LDAP_USER_BASE_DN:-ou=users,dc=liderahenk,dc=org}
+      LDAP_ROLE_BASE_DN: ${LDAP_ROLE_BASE_DN:-ou=Roles,dc=liderahenk,dc=org}
       LDAP_ADMIN_DN: "cn=${LDAP_ADMIN_USERNAME},${LDAP_ROOT}"
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       XMPP_HOST: ejabberd

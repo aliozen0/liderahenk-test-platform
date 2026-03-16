@@ -10,11 +10,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from orchestrator.main import ScenarioRunner
+from platform_runtime.registration import flatten_tree_agent_ids
+from platform_runtime.runtime_db import RuntimeDbAdapter
 
 
 @pytest.fixture(scope="module")
 def runner():
     return ScenarioRunner()
+
+
+@pytest.fixture(scope="module")
+def runtime_db():
+    return RuntimeDbAdapter.from_env()
 
 
 class TestRegistrationScenario:
@@ -35,8 +42,8 @@ class TestRegistrationScenario:
         """XMPP'te beklenen ajan sayısı (lider_sunucu hariç)."""
         total = runner.xmpp.get_registered_count()
         agents = total - 1  # lider_sunucu çıkar
-        assert agents >= runner.ahenk_count, \
-            f"XMPP: beklenen >={runner.ahenk_count}, bulunan {agents}"
+        assert agents == runner.ahenk_count, \
+            f"XMPP: beklenen {runner.ahenk_count}, bulunan {agents}"
 
 
 class TestBasicScenario:
@@ -77,71 +84,26 @@ class TestAgentConsistency:
 class TestLiderApiRegistration:
     """Lider domain state testleri — registration contract kabul kriterleri."""
 
-    def test_c_agent_count_matches_ahenk_count(self, runner):
+    def test_c_agent_count_matches_ahenk_count(self, runner, runtime_db):
         """c_agent tablosunda AHENK_COUNT kadar kayıt olmalı."""
-        import os
-        import subprocess
-        import pymysql
-
-        hosts = [(os.environ.get("MYSQL_HOST", "127.0.0.1"),
-                  int(os.environ.get("MYSQL_PORT", "3306")))]
-        try:
-            mariadb_ip = subprocess.check_output(
-                ["docker", "inspect", "-f",
-                 "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-                 "liderahenk-test-mariadb-1"],
-                text=True,
-            ).strip()
-            if mariadb_ip and all(host != mariadb_ip for host, _ in hosts):
-                hosts.append((mariadb_ip, 3306))
-        except Exception:
-            pass
-
-        passwords = [os.environ.get("MYSQL_PASSWORD"), "DEGISTIR", "secret"]
-        conn = None
-        last_error = None
-        for host, port in hosts:
-            for password in passwords:
-                if not password:
-                    continue
-                try:
-                    conn = pymysql.connect(
-                        host=host,
-                        port=port,
-                        user=os.environ.get("MYSQL_USER", "lider"),
-                        password=password,
-                        database=os.environ.get("MYSQL_DATABASE", "liderahenk"),
-                        connect_timeout=5,
-                    )
-                    break
-                except Exception as exc:
-                    last_error = exc
-            if conn:
-                break
-
-        assert conn is not None, f"MySQL bağlantısı kurulamadı: {last_error}"
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM c_agent")
-        count = cursor.fetchone()[0]
-        conn.close()
-
+        count = runtime_db.get_c_agent_count()
         expected = int(os.environ.get("AHENK_COUNT", "1"))
-        assert count >= expected, \
-            f"c_agent: beklenen >={expected}, bulunan {count}"
+        assert count == expected, f"c_agent: beklenen {expected}, bulunan {count}"
 
     def test_dashboard_total_computer_positive(self, runner):
-        """Dashboard API totalComputerNumber > 0 dönmeli."""
+        """Dashboard API totalComputerNumber AHENK_COUNT ile eşleşmeli."""
         info = runner.api.get_dashboard_info()
         assert info is not None, "Dashboard API yanıt vermedi"
         total = info.get("totalComputerNumber", 0)
-        assert total > 0, \
-            f"totalComputerNumber 0 — c_agent boş veya API hatası"
+        assert total == runner.ahenk_count, \
+            f"totalComputerNumber: beklenen {runner.ahenk_count}, bulunan {total}"
 
     def test_agent_list_not_empty(self, runner):
-        """agent-info/list en az 1 ajan dönmeli."""
+        """agent-info/list AHENK_COUNT kadar ajan dönmeli."""
         agents = runner.api.get_agent_list()
         assert agents is not None, "agent-info/list yanıt vermedi"
-        assert len(agents) > 0, "Ajan listesi boş"
+        assert len(agents) == runner.ahenk_count, \
+            f"agent-info/list: beklenen {runner.ahenk_count}, bulunan {len(agents)}"
 
     def test_first_agent_in_lider_domain(self, runner):
         """ahenk-001 Lider domain state'inde mevcut olmalı."""
@@ -149,3 +111,9 @@ class TestLiderApiRegistration:
         jids = [a.get("jid", "") for a in agents if a]
         assert any("ahenk-001" in jid for jid in jids), \
             f"ahenk-001 agent listesinde yok. Bulunanlar: {jids[:3]}"
+
+    def test_computer_tree_matches_ahenk_count(self, runner):
+        """Computer tree AHENK_COUNT kadar ajan göstermeli."""
+        tree_ids = flatten_tree_agent_ids(runner.api.get_computer_tree())
+        assert len(tree_ids) == runner.ahenk_count, \
+            f"computer tree: beklenen {runner.ahenk_count}, bulunan {len(tree_ids)}"

@@ -13,6 +13,26 @@ steps:
     params:
       expected: "${AHENK_COUNT}"
 
+  - name: check_c_agent_count
+    action: check_c_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_domain_agent_count
+    action: check_domain_agent_count
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_dashboard_total
+    action: check_dashboard_total
+    params:
+      expected: "${AHENK_COUNT}"
+
+  - name: check_computer_tree_count
+    action: check_computer_tree_count
+    params:
+      expected: "${AHENK_COUNT}"
+
   - name: check_first_agent
     action: check_agent_exists
     params:
@@ -23,7 +43,7 @@ steps:
   - name: check_last_agent
     action: check_agent_exists
     params:
-      agent_id: "ahenk-010"
+      agent_id: "${LAST_AGENT_ID}"
       check_ldap: true
       check_xmpp: true
 

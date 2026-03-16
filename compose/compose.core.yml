@@ -80,6 +80,7 @@ services:
       LDAP_HOST: localhost
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_USERS_OU: ${LDAP_USER_BASE_DN:-ou=users,dc=liderahenk,dc=org}
       LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       LIDER_ADMIN_UID: ${LIDER_USER:-lider-admin}

@@ -60,8 +60,8 @@ if [ -f "$MAIN_CFG" ]; then
 
   # Agent LDAP base DN
   sed -i "s|agent.ldap.base.dn = .*|agent.ldap.base.dn = ${LDAP_AGENT_BASE_DN:-ou=Ahenkler,${LDAP_BASE_DN:-dc=liderahenk,dc=org}}|" "$MAIN_CFG"
-  sed -i "s|user.ldap.base.dn = .*|user.ldap.base.dn = ${LDAP_BASE_DN:-dc=liderahenk,dc=org}|" "$MAIN_CFG"
-  sed -i "s|user.ldap.roles.dn= .*|user.ldap.roles.dn= ou=Roles,${LDAP_BASE_DN:-dc=liderahenk,dc=org}|" "$MAIN_CFG"
+  sed -i "s|user.ldap.base.dn = .*|user.ldap.base.dn = ${LDAP_USER_BASE_DN:-ou=users,${LDAP_BASE_DN:-dc=liderahenk,dc=org}}|" "$MAIN_CFG"
+  sed -i "s|user.ldap.roles.dn *= .*|user.ldap.roles.dn = ${LDAP_ROLE_BASE_DN:-ou=Roles,${LDAP_BASE_DN:-dc=liderahenk,dc=org}}|" "$MAIN_CFG"
 
   # Test ortamı: agent kayıt yetkilendirmesini devre dışı bırak
   sed -i "s|user.authorization.enabled = .*|user.authorization.enabled = false|" "$MAIN_CFG"

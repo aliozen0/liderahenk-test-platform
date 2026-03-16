@@ -1,0 +1,49 @@
+version: 1
+owner: platform
+baseline_name_env: GOLDEN_BASELINE_NAME
+source_kind: stock-liderahenk-install
+
+required_files:
+  manifest: manifest.json
+  ldap_tree: ldap-tree.json
+  config: config.json
+  api_captures:
+    - api-captures/dashboard.json
+    - api-captures/agent-list.json
+    - api-captures/computer-tree.json
+  ui_evidence:
+    - ui-evidence/dashboard.png
+    - ui-evidence/computer-management.png
+
+manifest_required_fields:
+  - schemaVersion
+  - baselineName
+  - status
+  - source
+  - capturedAt
+  - files
+  - captureContext
+
+diff_policy:
+  blocking_severity: error
+  severity_order:
+    - error
+    - warn
+    - info
+
+critical_runtime_fields:
+  - ldapRootDn
+  - agentLdapBaseDn
+  - userLdapBaseDn
+  - userGroupLdapBaseDn
+  - ahenkGroupLdapBaseDn
+  - xmppServiceName
+  - xmppResource
+  - ldapPassword
+  - xmppPassword
+
+secret_runtime_fields:
+  - ldapPassword
+  - xmppPassword
+  - fileServerPassword
+  - mailPassword

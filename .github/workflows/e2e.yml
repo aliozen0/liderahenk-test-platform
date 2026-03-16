@@ -1,4 +1,4 @@
-name: Quality And E2E
+name: Runtime And Quality
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
     - cron: "0 2 * * *"
 
 jobs:
-  quality-gate:
+  runtime-lane:
     runs-on: ubuntu-22.04
 
     steps:
@@ -32,7 +32,11 @@ jobs:
 
       - name: Start LiderAhenk platform
         run: |
-          make dev-obs
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            make dev-fidelity N=10
+          else
+            make dev-fast
+          fi
 
       - name: Wait for services
         run: |
@@ -40,24 +44,29 @@ jobs:
           sleep 60
           make health
 
-      - name: Run observability evidence gate
+      - name: Run runtime core lane
         run: |
-          make test-observability
-          make test-evidence
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            make test-runtime-core PROFILE=dev-fidelity
+          else
+            make test-runtime-core PROFILE=dev-fast
+          fi
 
-      - name: Run smoke E2E
-        run: |
-          make test-e2e-smoke
-
-      - name: Run nightly management E2E
+      - name: Run nightly operational lane
         if: github.event_name == 'schedule'
         run: |
+          make test-runtime-operational PROFILE=dev-fidelity
+          make test-runtime-scale N=10
           make test-e2e-management
 
       - name: Generate quality report
         if: always()
         run: |
-          make quality-report
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            PLATFORM_RUNTIME_PROFILE=dev-fidelity make quality-report
+          else
+            PLATFORM_RUNTIME_PROFILE=dev-fast make quality-report
+          fi
 
       - name: Upload quality artifacts
         if: always()

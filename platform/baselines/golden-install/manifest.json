@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "baselineName": "stock-liderahenk",
+  "status": "capture-pending",
+  "source": {
+    "kind": "stock-liderahenk-install",
+    "label": "pending-capture"
+  },
+  "capturedAt": null,
+  "captureContext": {
+    "capturedByHost": null,
+    "envFile": null,
+    "sourceLabel": "pending-capture",
+    "captureUiEvidence": true,
+    "apiUrl": null,
+    "uiUrl": null,
+    "ldap": {
+      "host": null,
+      "port": null,
+      "baseDn": null
+    },
+    "mysql": {
+      "host": null,
+      "port": null,
+      "database": null,
+      "user": null
+    },
+    "xmpp": {
+      "domain": null
+    }
+  },
+  "files": {
+    "ldap-tree.json": {
+      "path": "ldap-tree.json",
+      "size": 257,
+      "sha256": "3d85f85ce982a6325b51a3ba115542794c60070369f9caec1c0b1a56ab99d937"
+    },
+    "config.json": {
+      "path": "config.json",
+      "size": 268,
+      "sha256": "a8a9a1bb5b8485de069e29fef161393b091a8f7ba8f36423a7dd9fdcb010e36b"
+    },
+    "api-captures/dashboard.json": {
+      "path": "api-captures/dashboard.json",
+      "size": null,
+      "sha256": null
+    },
+    "api-captures/agent-list.json": {
+      "path": "api-captures/agent-list.json",
+      "size": null,
+      "sha256": null
+    },
+    "api-captures/computer-tree.json": {
+      "path": "api-captures/computer-tree.json",
+      "size": null,
+      "sha256": null
+    },
+    "ui-evidence/dashboard.png": {
+      "path": "ui-evidence/dashboard.png",
+      "size": null,
+      "sha256": null
+    },
+    "ui-evidence/computer-management.png": {
+      "path": "ui-evidence/computer-management.png",
+      "size": null,
+      "sha256": null
+    }
+  }
+}

@@ -1,0 +1,283 @@
+version: 1
+owner: platform
+
+first_scale_default: 10
+
+runtime_profiles:
+  dev-fast:
+    required_service_groups:
+      - core
+      - lider
+      - agent_plane
+    required_ports:
+      - 1389
+      - 8082
+      - 3001
+      - 15280
+    bootstrap_phases:
+      - name: core
+        services:
+          - mariadb
+          - ldap
+          - ldap-init
+          - ejabberd
+          - db-migrate
+        wait_for:
+          mariadb: healthy
+          ldap: healthy
+          ejabberd: healthy
+          ldap-init: completed
+          db-migrate: completed
+        timeout_seconds: 240
+      - name: lider-core
+        services:
+          - lider-core
+        no_deps: true
+        wait_for:
+          lider-core: healthy
+        timeout_seconds: 240
+      - name: lider-surface
+        services:
+          - liderapi
+          - lider-ui
+        no_deps: true
+        wait_for:
+          liderapi: healthy
+          lider-ui: running
+        timeout_seconds: 360
+      - name: platform-plane
+        services:
+          - provisioner
+          - registration-orchestrator
+        no_deps: true
+        wait_for:
+          provisioner: completed
+          registration-orchestrator: running
+        timeout_seconds: 240
+      - name: agents
+        services:
+          - ahenk
+        scale_ahenk: true
+        no_deps: true
+        wait_for:
+          ahenk:
+            state: running
+        timeout_seconds: 300
+  dev-fidelity:
+    required_service_groups:
+      - core
+      - lider
+      - agent_plane
+      - observability
+    required_ports:
+      - 1389
+      - 8082
+      - 3001
+      - 15280
+      - 9090
+      - 3000
+      - 3100
+    bootstrap_phases:
+      - name: core
+        services:
+          - mariadb
+          - ldap
+          - ldap-init
+          - ejabberd
+          - db-migrate
+          - prometheus
+          - grafana
+          - loki
+          - grafana-alloy
+          - otel-collector
+          - cadvisor
+          - mysqld-exporter
+          - ejabberd-exporter
+        wait_for:
+          mariadb: healthy
+          ldap: healthy
+          ejabberd: healthy
+          ldap-init: completed
+          db-migrate: completed
+          prometheus: running
+          grafana: running
+          loki: running
+          grafana-alloy: running
+          otel-collector: running
+          cadvisor: running
+          mysqld-exporter: running
+          ejabberd-exporter: running
+        timeout_seconds: 240
+      - name: lider-core
+        services:
+          - lider-core
+        no_deps: true
+        wait_for:
+          lider-core: healthy
+        timeout_seconds: 240
+      - name: lider-surface
+        services:
+          - liderapi
+          - lider-ui
+        no_deps: true
+        wait_for:
+          liderapi: healthy
+          lider-ui: running
+        timeout_seconds: 360
+      - name: platform-plane
+        services:
+          - provisioner
+          - registration-orchestrator
+          - platform-exporter
+        no_deps: true
+        wait_for:
+          provisioner: completed
+          registration-orchestrator: running
+          platform-exporter: running
+        timeout_seconds: 240
+      - name: agents
+        services:
+          - ahenk
+        scale_ahenk: true
+        no_deps: true
+        wait_for:
+          ahenk:
+            state: running
+        timeout_seconds: 300
+
+bootstrap_defaults:
+  poll_interval_seconds: 5
+  phase_timeout_seconds: 300
+
+service_groups:
+  core:
+    - mariadb
+    - ldap
+    - ejabberd
+  lider:
+    - lider-core
+    - liderapi
+    - lider-ui
+  agent_plane:
+    - provisioner
+    - ahenk
+    - registration-orchestrator
+  observability:
+    - prometheus
+    - grafana
+    - loki
+    - grafana-alloy
+    - otel-collector
+    - platform-exporter
+    - cadvisor
+    - mysqld-exporter
+    - ejabberd-exporter
+
+service_expectations:
+  mariadb:
+    kind: singleton
+    accepted_states:
+      - running
+  ldap:
+    kind: singleton
+    accepted_states:
+      - running
+  ejabberd:
+    kind: singleton
+    accepted_states:
+      - running
+  lider-core:
+    kind: singleton
+    accepted_states:
+      - running
+  liderapi:
+    kind: singleton
+    accepted_states:
+      - running
+  lider-ui:
+    kind: singleton
+    accepted_states:
+      - running
+  provisioner:
+    kind: singleton
+    accepted_states:
+      - running
+      - completed
+  registration-orchestrator:
+    kind: singleton
+    accepted_states:
+      - running
+  ahenk:
+    kind: scaled
+    accepted_states:
+      - running
+  prometheus:
+    kind: singleton
+    accepted_states:
+      - running
+  grafana:
+    kind: singleton
+    accepted_states:
+      - running
+  loki:
+    kind: singleton
+    accepted_states:
+      - running
+  grafana-alloy:
+    kind: singleton
+    accepted_states:
+      - running
+  otel-collector:
+    kind: singleton
+    accepted_states:
+      - running
+  platform-exporter:
+    kind: singleton
+    accepted_states:
+      - running
+  cadvisor:
+    kind: singleton
+    accepted_states:
+      - running
+  mysqld-exporter:
+    kind: singleton
+    accepted_states:
+      - running
+  ejabberd-exporter:
+    kind: singleton
+    accepted_states:
+      - running
+
+core_checks:
+  - docker_services
+  - exposed_ports
+  - liderapi_health
+  - liderapi_auth
+  - liderui_http
+  - ldap_health
+  - mariadb_health
+  - ejabberd_api
+
+operational_checks:
+  - registration_parity
+  - policy_roundtrip
+  - ui_agent_visibility
+  - ui_script_task_dispatch
+  - observability_targets
+  - grafana_dashboards
+  - loki_platform_logs
+
+observability:
+  expected_jobs:
+    - cadvisor
+    - mariadb
+    - liderapi
+    - ejabberd
+    - lider-core
+    - alloy
+    - platform-exporter
+    - otel-collector
+  expected_dashboards:
+    - liderahenk-slo
+    - liderahenk-pipeline-health
+    - liderahenk-workflow-health

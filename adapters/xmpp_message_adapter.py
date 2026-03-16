@@ -77,6 +77,29 @@ class XmppMessageAdapter:
         r.raise_for_status()
         return r.json()
 
+    def list_connected_users(self) -> list[str]:
+        """Bağlı kullanıcıları normalize edilmemiş halleriyle döndür."""
+        r = requests.post(
+            f"{self.api}/connected_users",
+            json={},
+            timeout=10,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        if isinstance(payload, list):
+            result = []
+            for item in payload:
+                if isinstance(item, dict):
+                    for key in ("jid", "user", "username"):
+                        value = item.get(key)
+                        if value:
+                            result.append(str(value))
+                            break
+                else:
+                    result.append(str(item))
+            return result
+        return []
+
     # ── İstatistik ────────────────────────────────────────────
 
     def get_registered_count(self) -> int:
@@ -92,13 +115,7 @@ class XmppMessageAdapter:
 
     def get_connected_count(self) -> int:
         """Bağlı kullanıcı sayısı."""
-        r = requests.post(
-            f"{self.api}/connected_users",
-            json={},
-            timeout=10,
-        )
-        r.raise_for_status()
-        users = r.json()
+        users = self.list_connected_users()
         return len(users) if isinstance(users, list) else int(users)
 
     # ── VHost ─────────────────────────────────────────────────

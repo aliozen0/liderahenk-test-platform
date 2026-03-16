@@ -1,5 +1,11 @@
 {
+  "schemaVersion": 1,
+  "capturedAt": null,
   "status": "capture-pending",
-  "source": "stock-liderahenk-install",
-  "description": "Canonical runtime configuration evidence will be captured here."
+  "source": {
+    "kind": "stock-liderahenk-install",
+    "label": "pending-capture"
+  },
+  "description": "Canonical runtime configuration evidence will be captured here.",
+  "fields": {}
 }

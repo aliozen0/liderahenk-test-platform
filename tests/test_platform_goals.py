@@ -20,6 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from adapters.lider_api_adapter import LiderApiAdapter
+from platform_runtime.registration import flatten_tree_agent_ids
+from platform_runtime.runtime_db import RuntimeDbAdapter
+
 
 # ─── Yardımcı ──────────────────────────────────────────────────────
 
@@ -230,6 +234,16 @@ class TestGoal2_RealServicesWork:
 class TestGoal3_AgentRegistration:
     """README vaadi: 'Ajan simülasyonu çalışır'"""
 
+    EXPECTED = int(os.environ.get("AHENK_COUNT", "1"))
+
+    @staticmethod
+    def _api() -> LiderApiAdapter:
+        return LiderApiAdapter(
+            base_url=os.environ.get("LIDER_API_URL_EXTERNAL", "http://127.0.0.1:8082"),
+            username=os.environ.get("LIDER_USER", "lider-admin"),
+            password=os.environ.get("LIDER_PASS", "secret"),
+        )
+
     def test_agents_registered_in_ldap(self):
         """Ahenk ajanları LDAP'ta kayıtlı olmalı."""
         result = subprocess.run(
@@ -252,10 +266,13 @@ class TestGoal3_AgentRegistration:
                     count = int(line.split(":")[1].strip())
                 except (IndexError, ValueError):
                     pass
-        has_agents = count > 0
+        has_agents = count == self.EXPECTED
         GoalTracker.record("3a", "Ajanlar LDAP'ta kayıtlı", has_agents,
                            f"{count} ajan kayıtlı")
-        assert has_agents, f"LDAP'ta ajan yok. Çıktı: {result.stdout[:200]}"
+        assert has_agents, (
+            f"LDAP parity bozuk. Beklenen {self.EXPECTED}, bulunan {count}. "
+            f"Çıktı: {result.stdout[:200]}"
+        )
 
     def test_agents_registered_in_xmpp(self):
         """Ahenk ajanları XMPP'te kayıtlı olmalı."""
@@ -270,10 +287,13 @@ class TestGoal3_AgentRegistration:
         users = resp.json()
         # lider_sunucu hariç
         agents = [u for u in users if u.startswith("ahenk")]
-        has_agents = len(agents) > 0
+        has_agents = len(agents) == self.EXPECTED
         GoalTracker.record("3b", "Ajanlar XMPP'te kayıtlı", has_agents,
                            f"{len(agents)} ajan, toplam {len(users)} kullanıcı")
-        assert has_agents, f"XMPP'te ajan yok. Kullanıcılar: {users[:5]}"
+        assert has_agents, (
+            f"XMPP parity bozuk. Beklenen {self.EXPECTED}, bulunan {len(agents)}. "
+            f"Kullanıcılar: {users[:5]}"
+        )
 
     def test_provisioner_completed(self):
         """Provisioner servisi başarıyla tamamlanmış olmalı."""
@@ -309,6 +329,38 @@ class TestGoal3_AgentRegistration:
         else:
             GoalTracker.record("3c", "Provisioner tamamlandı", False, "Konteyner bulunamadı")
             pytest.fail("Provisioner konteyneri bulunamadı")
+
+    def test_c_agent_matches_expected(self):
+        """c_agent sayısı AHENK_COUNT ile eşleşmeli."""
+        runtime_db = RuntimeDbAdapter.from_env()
+        count = runtime_db.get_c_agent_count()
+        result = count == self.EXPECTED
+        GoalTracker.record("3d", "c_agent sayısı eşleşiyor", result, f"{count}/{self.EXPECTED}")
+        assert result
+
+    def test_dashboard_matches_expected(self):
+        """Dashboard toplam bilgisayar sayısı AHENK_COUNT ile eşleşmeli."""
+        try:
+            payload = self._api().get_dashboard_info() or {}
+        except Exception:
+            GoalTracker.record("3e", "Dashboard sayısı eşleşiyor", False, "dashboard erişilemez")
+            pytest.fail("Dashboard API erişilemez")
+        total = int(payload.get("totalComputerNumber") or 0)
+        result = total == self.EXPECTED
+        GoalTracker.record("3e", "Dashboard sayısı eşleşiyor", result, f"{total}/{self.EXPECTED}")
+        assert result
+
+    def test_computer_tree_matches_expected(self):
+        """Computer tree agent sayısı AHENK_COUNT ile eşleşmeli."""
+        try:
+            tree = self._api().get_computer_tree()
+        except Exception:
+            GoalTracker.record("3f", "Computer tree sayısı eşleşiyor", False, "computer tree erişilemez")
+            pytest.fail("Computer tree API erişilemez")
+        count = len(flatten_tree_agent_ids(tree))
+        result = count == self.EXPECTED
+        GoalTracker.record("3f", "Computer tree sayısı eşleşiyor", result, f"{count}/{self.EXPECTED}")
+        assert result
 
 
 # ─── Hedef 4: API Erişimi ve JWT Auth ─────────────────────────────
@@ -395,11 +447,26 @@ class TestGoal5_Testability:
     def test_adapter_layer_exists(self):
         """ACL adapter katmanı mevcut olmalı."""
         base = "/home/huma/liderahenk-test/adapters"
-        files = ["lider_api_adapter.py", "xmpp_message_adapter.py", "ldap_schema_adapter.py"]
+        files = ["lider_api_adapter.py", "xmpp_message_adapter.py", "ldap_schema_adapter.py", "runtime_db_adapter.py"]
         existing = [f for f in files if os.path.exists(os.path.join(base, f))]
         result = len(existing) == len(files)
         GoalTracker.record("5d", "ACL adapter katmanı mevcut", result,
                            f"{len(existing)}/{len(files)} dosya")
+        assert result
+
+    def test_release_gate_surfaces_exist(self):
+        """Baseline ve release gate yüzeyi repo içinde tanımlı olmalı."""
+        files = [
+            "/home/huma/liderahenk-test/platform/contracts/baseline-registry.yaml",
+            "/home/huma/liderahenk-test/platform/contracts/failure-taxonomy.yaml",
+            "/home/huma/liderahenk-test/platform/contracts/registration-evidence.yaml",
+            "/home/huma/liderahenk-test/platform/scripts/validate_golden_baseline.py",
+            "/home/huma/liderahenk-test/platform/scripts/capture_golden_baseline.py",
+            "/home/huma/liderahenk-test/platform/scripts/diff_baseline.py",
+        ]
+        existing = [path for path in files if os.path.exists(path)]
+        result = len(existing) == len(files)
+        GoalTracker.record("5e", "Release gate yüzeyi mevcut", result, f"{len(existing)}/{len(files)} dosya")
         assert result
 
 
