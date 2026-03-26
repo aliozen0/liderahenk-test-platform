@@ -74,7 +74,7 @@ def _compose_stack(profile: str) -> list[str]:
 
 def _compose_ps(profile: str) -> list[dict[str, Any]]:
     compose_stack = _compose_stack(profile)
-    cmd = ["docker", "compose", "--env-file", ".env"]
+    cmd = ["docker", "compose"]
     for path in compose_stack:
         cmd.extend(["-f", path])
     cmd.extend(["-p", _project_name(), "ps", "--all", "--format", "json"])

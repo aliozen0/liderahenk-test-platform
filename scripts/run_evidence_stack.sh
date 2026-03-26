@@ -9,7 +9,6 @@ DEFAULT_N="$(grep '^AHENK_COUNT=' .env | cut -d= -f2)"
 N="${N:-$DEFAULT_N}"
 
 COMPOSE_ARGS=(
-  --env-file .env
   -f compose/compose.core.yml
   -f compose/compose.lider.yml
   -f compose/compose.agents.yml

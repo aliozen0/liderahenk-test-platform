@@ -42,7 +42,7 @@ def http_post(url, timeout=5, **kwargs):
 def docker_ps_services():
     """Çalışan servislerin listesini döner."""
     result = subprocess.run(
-        ["docker", "compose", "--env-file", ".env",
+        ["docker", "compose",
          "-f", "compose/compose.core.yml",
          "-f", "compose/compose.lider.yml",
          "-f", "compose/compose.agents.yml",
@@ -168,7 +168,7 @@ class TestGoal2_RealServicesWork:
     def test_ldap_returns_data(self):
         """LDAP sorgusu gerçek veri dönmeli."""
         result = subprocess.run(
-            ["docker", "compose", "--env-file", ".env",
+            ["docker", "compose",
              "-f", "compose/compose.core.yml",
              "-p", "liderahenk-test",
              "exec", "-T", "ldap",
@@ -204,7 +204,7 @@ class TestGoal2_RealServicesWork:
     def test_mariadb_has_tables(self):
         """MariaDB'de liderdb tabloları mevcut olmalı."""
         result = subprocess.run(
-            ["docker", "compose", "--env-file", ".env",
+            ["docker", "compose",
              "-f", "compose/compose.core.yml",
              "-p", "liderahenk-test",
              "exec", "-T", "mariadb",
@@ -247,7 +247,7 @@ class TestGoal3_AgentRegistration:
     def test_agents_registered_in_ldap(self):
         """Ahenk ajanları LDAP'ta kayıtlı olmalı."""
         result = subprocess.run(
-            ["docker", "compose", "--env-file", ".env",
+            ["docker", "compose",
              "-f", "compose/compose.core.yml",
              "-p", "liderahenk-test",
              "exec", "-T", "ldap",
@@ -298,7 +298,7 @@ class TestGoal3_AgentRegistration:
     def test_provisioner_completed(self):
         """Provisioner servisi başarıyla tamamlanmış olmalı."""
         result = subprocess.run(
-            ["docker", "compose", "--env-file", ".env",
+            ["docker", "compose",
              "-f", "compose/compose.core.yml",
              "-f", "compose/compose.agents.yml",
              "-p", "liderahenk-test",

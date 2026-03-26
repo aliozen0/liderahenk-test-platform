@@ -28,7 +28,7 @@ def _compose_stack(profile: str) -> list[str]:
 
 
 def _compose_base_cmd(profile: str, project_name: str) -> list[str]:
-    cmd = ["docker", "compose", "--env-file", ".env"]
+    cmd = ["docker", "compose"]
     for compose_file in _compose_stack(profile):
         cmd.extend(["-f", compose_file])
     cmd.extend(["-p", project_name])

@@ -15,9 +15,12 @@ make dev-fidelity N=10
 - [Mimari](#mimari)
 - [Calisma Profilleri](#calisma-profilleri)
 - [Servisler](#servisler)
-- [Hizli Baslangic](#hizli-baslangic)
+- [Host Sistem Uyumlulugu](#host-sistem-uyumlulugu)
+- [Kurulum Oncesi Kontrol Listesi](#kurulum-oncesi-kontrol-listesi)
+- [GitHub'dan Sifirdan Kurulum](#githubdan-sifirdan-kurulum)
 - [Dogrulama Akisi](#dogrulama-akisi)
 - [Arayuzler](#arayuzler)
+- [Sik Karsilasilan Sorunlar](#sik-karsilasilan-sorunlar)
 - [Repo Haritasi](#repo-haritasi)
 - [Make Hedefleri](#make-hedefleri)
 - [Observability](#observability)
@@ -135,60 +138,296 @@ uyarlamak ve calistirmaktir.
 | `grafana` | dashboard ve runtime gorunurlugu |
 | `loki` | log toplama |
 
-## Hizli Baslangic
+## Host Sistem Uyumlulugu
 
-### 1. Repo'yu hazirla
+Bu platform host tarafta asagidaki Linux ortamlari hedeflenerek yazilmistir:
+
+| Host sistem | Durum | Not |
+|---|---|---|
+| Ubuntu 22.04+ | onerilen | README komutlari dogrudan uygulanabilir |
+| WSL2 + Ubuntu | desteklenir | Docker Desktop ya da host Docker ile birlikte kullanilabilir |
+| Pardus 23 | desteklenir | Docker kurulumu Debian yolu ile yapilmalidir |
+
+Pardus notu:
+
+- resmi Pardus 23 guncelleme notlari, Pardus 23'un `Debian 12.11` tabanini
+  kullandigini belirtir
+- Docker resmi dokumani, turev Debian dagitimlarinda Debian kurulum yolunun
+  izlenmesini ve gerekiyorsa Debian kod adinin acik yazilmasini onerir
+- bu nedenle Pardus 23 uzerinde Docker kurulumu icin `debian` repo yolu ve
+  `bookworm` kod adi esas alinmalidir
+
+Resmi referanslar:
+
+- [Pardus 23 icin yeni guncellemeler](https://pardus.org.tr/pardus-23-icin-yeni-guncellemeler-yayimlandi/)
+- [Docker Engine on Debian](https://docs.docker.com/engine/install/debian/)
+- [Docker Linux post-install](https://docs.docker.com/engine/install/linux-postinstall/)
+
+## Kurulum Oncesi Kontrol Listesi
+
+- isletim sistemi: Ubuntu 22.04+, Pardus 23 ya da WSL2 icindeki Ubuntu
+- Docker komutu: `docker`
+- Compose komutu: `docker compose`
+- Python ortami: `venv`
+- shell: bash
+
+Baslamadan once sunlarin hazir oldugundan emin ol:
+
+- internet baglantin var
+- Docker daemon calisiyor
+- su portlar baska uygulamalar tarafindan kullanilmiyor:
+  `1389`, `3000`, `3001`, `3100`, `8082`, `9090`, `15280`, `16686`
+- ilk kurulumda image build ve package indirmeleri zaman alabilir
+
+Kendi makinenin hazir olup olmadigini su komutlarla hizlica kontrol edebilirsin:
 
 ```bash
-git clone <repo-url> liderahenk-test
-cd liderahenk-test
+docker version
+docker compose version
+python3 --version
+git --version
+make --version
+```
+
+## GitHub'dan Sifirdan Kurulum
+
+Bu bolum, repo daha yeni klonlanmisken izlenecek net kurulumu anlatir.
+
+### 1. Temel sistem araclarini kur
+
+Ubuntu, Pardus ya da WSL/Ubuntu icinde su paketleri kur:
+
+```bash
+sudo apt update
+sudo apt install -y git make curl ca-certificates python3 python3-venv python3-pip
+```
+
+Sonra surumleri kontrol et:
+
+```bash
+python3 --version
+git --version
+make --version
+```
+
+Not:
+
+- CI ortami `Python 3.11` kullanir
+- yerelde en sorunsuz secenek `Python 3.11` olsa da, repo scriptleri modern
+  `Python 3.x` ortamlariyla calisacak sekilde yazilmistir
+
+### 2. Docker Engine ve Compose v2 kur
+
+Eger `docker version` ve `docker compose version` zaten calisiyorsa bu adimi
+atlayabilirsin.
+
+Bu repo host makinede `docker compose` komutunu bekler. `docker-compose`
+degil, Compose v2 plugin gereklidir.
+
+#### 2A. Ubuntu 22.04+ ya da WSL2/Ubuntu
+
+Ubuntu icin resmi Docker apt repo kurulumu:
+
+```bash
+sudo apt remove -y docker.io docker-compose docker-compose-v2 podman-docker containerd runc
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+#### 2B. Pardus 23
+
+Pardus 23, Debian 12 tabanli oldugu icin Docker kurulumu Debian yolu ile
+yapilmalidir. En guvenli yol, Docker'in Debian dokumanindaki repo kurulumunu
+Pardus 23 icin `bookworm` kod adi ile uygulamaktir:
+
+```bash
+for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt remove -y $pkg; done
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: bookworm
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+Pardus'ta `VERSION_CODENAME` degeri Docker repo tarafinda birebir eslesmeyebilir.
+Bu nedenle `bookworm` degerini acik yazmak daha guvenlidir.
+
+Docker kurulduktan sonra servisi ve komutlari dogrula:
+
+```bash
+sudo systemctl status docker --no-pager
+docker compose version
+```
+
+`docker` komutunu `sudo` kullanmadan calistirmak icin:
+
+```bash
+sudo groupadd docker || true
+sudo usermod -aG docker $USER
+newgrp docker
+docker run hello-world
+```
+
+`newgrp docker` bazen yeterli olmayabilir. O durumda terminali kapatip yeniden
+acman ya da oturumu kapatip tekrar girmen gerekir.
+
+### 3. Repoyu GitHub'dan klonla
+
+```bash
+git clone https://github.com/aliozen0/liderahenk-test-platform.git
+cd liderahenk-test-platform
+```
+
+Istersen klasor adini degistirebilirsin. Repo kodu klasor adina bagli degildir.
+
+### 4. Python sanal ortami olustur
+
+Repo icindeki Python yardimci scriptleri ve testler icin sanal ortam kullanmak
+en temiz yoldur:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements-test.txt
+```
+
+Onemli:
+
+- bu repoda varsayilan bagimlilik dosyasi `requirements.txt` degil,
+  `requirements-test.txt` dosyasidir
+- `bdist_wheel` hatasi aliyorsan once `pip install wheel` ya da
+  `python -m pip install --upgrade pip setuptools wheel` calistir
+
+### 5. Ortam dosyasini olustur
+
+```bash
 cp .env.example .env
 ```
 
-Gereken temel araclar:
+Yerel deneme icin cogu durumda `.env` dosyasini oldugu gibi kullanabilirsin.
+Ama ilk bakista anlaman gereken ana alanlar sunlar:
 
-- Docker Engine
-- Docker Compose v2
-- Python 3.11+
+- `AHENK_COUNT`: kac ajan baslatilacagini belirler
+- `PLATFORM_RUNTIME_PROFILE`: varsayilan profil
+- `LIDER_USER` ve `LIDER_PASS`: UI/API giris bilgisi
+- `LDAP_ADMIN_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`: yerel ortam
+  sifreleri
 
-### 2. Temiz bir ortamla basla
+Zayif bir makinede ilk deneme icin `.env` icindeki `AHENK_COUNT=10` degerini
+`3` ya da `5` yapabilir veya komutta `N=3` verebilirsin.
+
+### 6. Docker aglarini olustur
+
+Bu repo, compose overlay'leri icin onceden dis Docker network'leri bekler.
+Asagidaki komutlar bunlari olusturur:
 
 ```bash
-make clean-hard
 make network-init
+make network-check
 ```
 
-### 3. Platformu kaldir
+Her sey dogruysa `OK ...` satirlari gorursun.
 
-Hizli profil:
+### 7. Ilk kez platformu calistir
+
+Ilk deneme icin iki ana secenek var.
+
+Hizli ve daha hafif profil:
 
 ```bash
-make dev-fast N=10
+make dev-fast N=3
 ```
 
-Ana kabul profili:
+Asil kabul ve daha gercekci profil:
 
 ```bash
 make dev-fidelity N=10
 ```
 
-Tracing dahil:
+Tracing dahil genis profil:
 
 ```bash
 make dev-full N=10
 ```
 
-### 4. Runtime'i dogrula
+Not:
+
+- ilk calistirmada image build ve bagimlilik indirmeleri nedeniyle sure uzun
+  olabilir
+- daha once basarisiz bir kurulum denediysen sifirdan temizlemek icin once
+  `make clean-hard` calistirabilirsin
+
+### 8. Platformun ayaga kalktigini kontrol et
+
+Asagidaki komutlar ilk kontrol icin yeterlidir:
+
+```bash
+make status
+make health
+make token
+make agents
+```
+
+Beklenen genel sonuc:
+
+- `make status` konteynerleri listeler
+- `make health` temel servislerin cevap verdigini gosterir
+- `make token` JWT token uretir
+- `make agents` ajan listesini getirir
+
+### 9. Tarayicidan giris yap
+
+Platform ayaga kalkinca su adresleri ac:
+
+- Lider UI: `http://localhost:3001`
+- Lider API: `http://localhost:8082`
+- LDAP: `ldap://localhost:1389`
+- Grafana: `http://localhost:3000`
+- Prometheus: `http://localhost:9090`
+- Jaeger: `http://localhost:16686` yalnizca `make dev-full` ile
+
+Varsayilan giris bilgileri:
+
+- Lider UI / API: `.env` icindeki `LIDER_USER` ve `LIDER_PASS`
+- Grafana: `admin / admin`
+
+### 10. Kurulumu test et
+
+Platform acildi diye her sey tamam sayilmaz. Kurulumu en az bir kez test etmek
+iyi fikirdir.
 
 Core runtime lane:
 
 ```bash
-make test-runtime-core PROFILE=dev-fidelity N=10
+make test-runtime-core PROFILE=dev-fast N=3
 ```
 
-Operasyonel runtime lane:
+Ana kabul lane:
 
 ```bash
+make test-runtime-core PROFILE=dev-fidelity N=10
 make test-runtime-operational PROFILE=dev-fidelity N=10
 ```
 
@@ -198,13 +437,30 @@ Olcek lane:
 make test-runtime-scale N=10
 ```
 
-Yardimci komutlar:
+### 11. Durdur ve temizle
+
+Isin bitince ortami kapatmak icin:
 
 ```bash
-make health
-make token
-make agents
-make status
+make stop
+```
+
+Observability ve tracing dahil her seyi kapatmak icin:
+
+```bash
+make stop-all
+```
+
+Container, volume ve orphan temizligi icin:
+
+```bash
+make clean
+```
+
+En sert temizlik icin:
+
+```bash
+make clean-hard
 ```
 
 ## Dogrulama Akisi
@@ -257,9 +513,89 @@ Runtime lane'lerin altinda destekleyici katmanlar da vardir:
 |---|---|---|
 | Lider UI | http://localhost:3001 | giris: `.env` icindeki `LIDER_USER` / `LIDER_PASS` |
 | Lider API | http://localhost:8082 | dis erisim ucu |
+| LDAP | ldap://localhost:1389 | yerel LDAP sorgulari icin |
 | Grafana | http://localhost:3000 | varsayilan `admin / admin` |
 | Prometheus | http://localhost:9090 | metrics ve target gorunumu |
 | Jaeger | http://localhost:16686 | yalnizca `make dev-full` ile |
+
+## Sik Karsilasilan Sorunlar
+
+### `Could not open requirements file: requirements.txt`
+
+Bu repoda kullanilan dosya `requirements.txt` degil `requirements-test.txt`
+dosyasidir.
+
+Dogru komut:
+
+```bash
+pip install -r requirements-test.txt
+```
+
+### `error: invalid command 'bdist_wheel'`
+
+Sanal ortamda `wheel` eksik olabilir.
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements-test.txt
+```
+
+### `unknown flag: --env-file`
+
+Bu hata genelde eski Docker/Compose kurulumu ya da repo icindeki eski bir
+versiyon nedeniyle gorulur.
+
+Kontrol et:
+
+```bash
+docker compose version
+git pull
+```
+
+Repo icindeki guncel akista `docker compose` komutu kullanilir. Yine de sorun
+devam ediyorsa Docker Compose v2 kurulumu eksik olabilir.
+
+Pardus kullaniyorsan Docker repo taniminda `debian` yolu ve `bookworm` kod adini
+kullandigindan emin ol.
+
+### `permission denied while trying to connect to the Docker daemon socket`
+
+Kullanicin `docker` grubunda olmayabilir:
+
+```bash
+sudo groupadd docker || true
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### `WARNING: Error loading config file: ~/.docker/config.json: permission denied`
+
+Bu genelde daha once `sudo docker ...` kullanildigi icin olur.
+
+```bash
+sudo chown "$USER":"$USER" "$HOME/.docker" -R
+sudo chmod g+rwx "$HOME/.docker" -R
+```
+
+### Port cakismasi
+
+Asagidaki portlardan biri baska uygulama tarafindan kullaniliyorsa platform
+tam kalkmayabilir:
+
+- `3000`
+- `3001`
+- `1389`
+- `3100`
+- `8082`
+- `9090`
+- `15280`
+- `16686`
+
+Hangi surecin portu tuttugunu gormek icin:
+
+```bash
+sudo ss -ltnp | grep -E '1389|3000|3001|3100|8082|9090|15280|16686'
+```
 
 ## Repo Haritasi
 

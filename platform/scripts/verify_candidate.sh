@@ -38,6 +38,6 @@ acceptance_profile="$("$manifest_get" "$component" acceptance_profile "$manifest
 
 (
     cd "$repo_root"
-    env "$env_name=$ref" docker compose --env-file .env $compose_args -p liderahenk-test build "$service"
+    env "$env_name=$ref" docker compose $compose_args -p liderahenk-test build "$service"
     PROFILE="${PROFILE:-$acceptance_profile}" make test-release-gate PROFILE="${PROFILE:-$acceptance_profile}"
 )

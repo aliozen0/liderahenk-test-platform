@@ -26,9 +26,9 @@ PASS=0
 FAIL=0
 SKIP=0
 PROJECT_NAME="liderahenk-test"
-COMPOSE_CORE="docker compose --env-file .env -f compose/compose.core.yml -p ${PROJECT_NAME}"
-COMPOSE_LIDER="docker compose --env-file .env -f compose/compose.core.yml -f compose/compose.lider.yml -p ${PROJECT_NAME}"
-COMPOSE_ALL="docker compose --env-file .env -f compose/compose.core.yml -f compose/compose.lider.yml -f compose/compose.agents.yml -p ${PROJECT_NAME}"
+COMPOSE_CORE="docker compose -f compose/compose.core.yml -p ${PROJECT_NAME}"
+COMPOSE_LIDER="docker compose -f compose/compose.core.yml -f compose/compose.lider.yml -p ${PROJECT_NAME}"
+COMPOSE_ALL="docker compose -f compose/compose.core.yml -f compose/compose.lider.yml -f compose/compose.agents.yml -p ${PROJECT_NAME}"
 
 pass() { echo -e "  ${GREEN}✅ PASS${NC}: $1"; PASS=$((PASS + 1)); }
 fail() { echo -e "  ${RED}❌ FAIL${NC}: $1"; FAIL=$((FAIL + 1)); }

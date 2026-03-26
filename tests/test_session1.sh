@@ -13,7 +13,7 @@ NC='\033[0m'
 PASS=0
 FAIL=0
 PROJECT_NAME="liderahenk-test"
-COMPOSE_CMD="docker compose --env-file .env -f compose/compose.core.yml -p ${PROJECT_NAME}"
+COMPOSE_CMD="docker compose -f compose/compose.core.yml -p ${PROJECT_NAME}"
 
 pass() { echo -e "  ${GREEN}✅ PASS${NC}: $1"; PASS=$((PASS + 1)); }
 fail() { echo -e "  ${RED}❌ FAIL${NC}: $1"; FAIL=$((FAIL + 1)); }

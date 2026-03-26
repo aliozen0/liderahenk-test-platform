@@ -43,7 +43,7 @@ def http_post(url, timeout=5, **kwargs):
 def docker_ps():
     """docker compose ps çıktısını döner."""
     result = subprocess.run(
-        ["docker", "compose", "--env-file", ".env",
+        ["docker", "compose",
          "-f", "compose/compose.core.yml",
          "-f", "compose/compose.lider.yml",
          "-f", "compose/compose.agents.yml",
@@ -188,7 +188,7 @@ class TestServiceHealth:
     def test_ldap_search(self):
         """LDAP basit arama yapılabilmeli."""
         result = subprocess.run(
-            ["docker", "compose", "--env-file", ".env",
+            ["docker", "compose",
              "-f", "compose/compose.core.yml",
              "-p", "liderahenk-test",
              "exec", "-T", "ldap",
@@ -205,7 +205,7 @@ class TestServiceHealth:
     def test_mariadb_accessible(self):
         """MariaDB docker exec ile erişilebilir olmalı."""
         result = subprocess.run(
-            ["docker", "compose", "--env-file", ".env",
+            ["docker", "compose",
              "-f", "compose/compose.core.yml",
              "-p", "liderahenk-test",
              "exec", "-T", "mariadb",
