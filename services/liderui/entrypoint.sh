@@ -21,6 +21,14 @@ if [ -f "$INDEX_FILE" ]; then
   # </head> etiketinden hemen önce enjekte et
   sed -i "s|</head>|${ENV_SCRIPT}</head>|" "$INDEX_FILE"
 
+  # [LIDERUI-TREE-FIX] Ağaç bileşeninin 'tam ekranda yüklenmeme/Kayıt bulunamadı' 
+  # ve sadece F12 (resize) sonrası görünmesi sorununun çözümü.
+  # PrimeVue ScrollPanel hatası nedeniyle virtual-scroller boyutu 0 algılıyordu.
+  # Çözüm: CSS ile taşıp görünür yap (sağ tıka engel olan %100 width kaldırıldı).
+  # Ayrıca Vue SPA olduğu için sayfa her tıklandığında (navige olduğunda) resize fırlat.
+  UI_FIX="<style>.p-scrollpanel-content{overflow:visible!important;position:relative!important}</style><script>document.addEventListener('click',function(){setTimeout(function(){window.dispatchEvent(new Event('resize'));},300);setTimeout(function(){window.dispatchEvent(new Event('resize'));},800);});</script>"
+  sed -i "s|</head>|${UI_FIX}</head>|" "$INDEX_FILE"
+
   echo "✅ Runtime env enjekte edildi:"
   echo "   LIDER_API_URL=${LIDER_API_URL}"
   echo "   LIDER_API_VERSION=${LIDER_API_VERSION}"

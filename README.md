@@ -1,554 +1,395 @@
-# 🛡️ LiderAhenk Test Platform
+# LiderAhenk Test Platform
 
-> **Pardus LiderAhenk** için konteyner tabanlı, tam otomatik test ortamı.  
-> Tek komutla ayağa kalkar. Gerçek servisleri çalıştırır. Her şeyi test eder.
+> LiderAhenk'i fork'lamadan, gercek sistem bilesenlerini disaridan saran,
+> tek komutla ayaga kalkan, tekrar uretilebilir runtime-first laboratuvar
+> platformu.
 
 ```bash
-make dev-fidelity   # Kanonik kabul profili
+make dev-fidelity N=10
 ```
 
----
+## Icindekiler
 
-## İçindekiler
-
-- [Nedir Bu Proje?](#nedir-bu-proje)
+- [Proje Nedir?](#proje-nedir)
+- [Temel Hedef](#temel-hedef)
 - [Mimari](#mimari)
+- [Calisma Profilleri](#calisma-profilleri)
 - [Servisler](#servisler)
-- [Gereksinimler](#gereksinimler)
-- [Hızlı Başlangıç](#hızlı-başlangıç)
-- [Dizin Yapısı](#dizin-yapısı)
-- [Makefile Komutları](#makefile-komutları)
-- [Test Katmanları](#test-katmanları)
-- [Gözlemlenebilirlik](#gözlemlenebilirlik)
-- [Senaryo Motoru](#senaryo-motoru)
-- [ACL Adapter Katmanı](#acl-adapter-katmanı)
-- [Güvenlik](#güvenlik)
-- [Bilinen Kısıtlamalar ve Çözümler](#bilinen-kısıtlamalar-ve-çözümler)
-- [Katkı](#katkı)
+- [Hizli Baslangic](#hizli-baslangic)
+- [Dogrulama Akisi](#dogrulama-akisi)
+- [Arayuzler](#arayuzler)
+- [Repo Haritasi](#repo-haritasi)
+- [Make Hedefleri](#make-hedefleri)
+- [Observability](#observability)
+- [Katki ve Gelistirme Notlari](#katki-ve-gelistirme-notlari)
 
----
+## Proje Nedir?
 
-## Nedir Bu Proje?
+Bu repo, LiderAhenk'in ic mantigini degistiren yeni bir urun ya da kalici bir
+fork degildir. Amac, gercek LiderAhenk kurulumunu disaridan saran bir platform
+kurmaktir.
 
-[Pardus LiderAhenk](https://github.com/Pardus-LiderAhenk), Pardus Linux sistemlerini merkezi olarak yönetmek için kullanılan açık kaynaklı bir platform. Lider sunucusu + Ahenk ajanları üzerinden çalışır.
+Platformun ana gorevi:
 
-Bu proje, LiderAhenk'i **gerçek bir sunucuya kurmak zorunda kalmadan** test edebilmek için tasarlanmış bir konteyner ortamıdır.
+- LDAP, MariaDB, ejabberd/XMPP, `lider-core`, `liderapi`, `lider-ui` ve Ahenk
+  ajanlarini birlikte ayaga kaldirmak
+- bunu tek komutla ve tekrar uretilebilir sekilde yapmak
+- VM zorunlulugu olmadan `N` adet ajanla calisabilmek
+- sistemin gercekten kullanilabilir olup olmadigini runtime uzerinden
+  dogrulamak
+- Grafana, Prometheus ve Loki ile runtime davranisini gorunur kilmak
 
-### Ne Sağlar?
+Resmi vizyon ve urun hedefleri:
 
-| Sorun | Çözüm |
-|---|---|
-| LiderAhenk test etmek için gerçek Pardus sunucusu gerekiyor | `make dev-fast` ile her şey dizüstü bilgisayarda çalışır |
-| Yeni sürüm çıktı, bir şeyler bozuldu mu? | `make test-contract` 5 dakikada yanıt verir |
-| 100 ajan aynı anda bağlanabilir mi? | `make test-scale N=100` bunu ölçer |
-| Ağ kesilince mesaj kayboluyor mu? | Toxiproxy kaos testleri bunu kanıtlar (Oturum 8) |
-| Bu imajda CVE var mı? | CI pipeline her push'ta Trivy ile tarar (Oturum 7) |
+- [docs/platform_vizyonu.md](/home/huma/liderahenk-test/docs/platform_vizyonu.md)
+- [docs/product-requirements.md](/home/huma/liderahenk-test/docs/product-requirements.md)
 
----
+## Temel Hedef
+
+Basari olcutu yalnizca konteynerlerin `running` olmasi degildir. Hedef, su
+zincirin gercekten calismasidir:
+
+1. core servisler kalkar
+2. Ahenk ajanlari baslar
+3. registration zinciri tamamlanir
+4. ajanlar UI ve API uzerinden gorunur
+5. task ve policy akislarina girebilir
+6. observability katmani runtime durumunu gosterebilir
+
+Onemli model:
+
+- insan kullanici ve istemci/ajan ayni sey degildir
+- directory yapisinda farkli koklerde tutulurlar
+- platform runtime truth'u yalnizca resmi yuzeylerden okur
+
+Runtime truth kaynaklari:
+
+- LDAP
+- ejabberd/XMPP
+- MariaDB `c_agent` ve `c_config`
+- `liderapi` dashboard / computer tree / agent list yuzeyleri
+- Grafana / Prometheus / Loki telemetry yuzeyi
 
 ## Mimari
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    liderahenk_external                          │
-│                  ┌──────────┐  ┌──────────┐                    │
-│                  │ Lider UI │  │ liderapi │                    │
-│                  │  :3001   │  │  :8082   │                    │
-│                  └────┬─────┘  └────┬─────┘                    │
-└───────────────────────┼─────────────┼────────────────────────── ┘
-                        │             │
-┌───────────────────────┼─────────────┼────────────────────────── ┐
-│              liderahenk_core (internal — dışa kapalı)           │
-│         ┌─────────────┐  ┌──────────┐  ┌─────────┐             │
-│         │  lider-core │  │ MariaDB  │  │  LDAP   │             │
-│         │   (Karaf)   │  │  :3306   │  │  :1389  │             │
-│         └──────┬──────┘  └──────────┘  └─────────┘             │
-└────────────────┼────────────────────────────────────────────────┘
-                 │ XMPP (5222)
-┌────────────────┼────────────────────────────────────────────────┐
-│              liderahenk_agents                                  │
-│         ┌─────┴──────┐   ┌─────────────────────────────┐       │
-│         │  ejabberd  │   │  ahenk-001 ... ahenk-N      │       │
-│         │  :5222     │   │  (XMPP bağlantılı, ölçekli) │       │
-│         └────────────┘   └─────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────────┘
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                         external platform                           │
+│  bootstrap | provisioning | runtime checks | evidence | adapters   │
+└─────────────────────────────────────────────────────────────────────┘
                  │
-┌────────────────┼────────────────────────────────────────────────┐
-│              liderahenk_obs                                     │
-│   ┌────────────┐  ┌─────────┐  ┌──────┐  ┌────────────────┐   │
-│   │ Prometheus │  │ Grafana │  │ Loki │  │ cAdvisor/OTel  │   │
-│   │   :9090    │  │  :3000  │  │:3100 │  │                │   │
-│   └────────────┘  └─────────┘  └──────┘  └────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         LiderAhenk runtime                          │
+│  lider-ui | liderapi | lider-core | MariaDB | LDAP | ejabberd      │
+└─────────────────────────────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                          ahenk agent pool                           │
+│                    ahenk-001 ... ahenk-N                            │
+└─────────────────────────────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                           observability                             │
+│                 Grafana | Prometheus | Loki                         │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4 Katmanlı Tasarım
+Mimari modeli:
 
-| Katman | Sorumluluk |
-|---|---|
-| **L1 — Platform** | Docker ağları, bootstrap, registration orchestration, healthcheck'ler |
-| **L2 — Core** | Lider sunucusu, LDAP, ejabberd, MariaDB |
-| **L3 — Agents** | Provisioner + ölçeklenebilir Ahenk ajanları |
-| **L4 — Observability** | Metrik, log, trace toplama ve görselleştirme |
+- upstream clone
+- patch queue
+- extension source
+- runtime hooks
+- orchestration
 
-### Çalışma Profilleri
+Bu modelin amaci, upstream urunu iceriden yeniden yazmak degil; disaridan
+uyarlamak ve calistirmaktir.
 
-| Profil | Hedef | Komut |
+## Calisma Profilleri
+
+| Profil | Amac | Komut |
 |---|---|---|
-| `dev-fast` | Hızlı geliştirme ve smoke testi | `make dev-fast` |
-| `dev-fidelity` | Stock kurulum paritesine en yakın kabul profili | `make dev-fidelity` |
-
----
+| `dev-fast` | hizli gelistirme, smoke ve temel runtime kontrolu | `make dev-fast` |
+| `dev-fidelity` | ana kabul profili, observability ve operasyonel kontrol | `make dev-fidelity` |
+| `dev-full` | tracing dahil genisletilmis profil | `make dev-full` |
 
 ## Servisler
 
-| Servis | İmaj | Port | Açıklama |
-|---|---|---|---|
-| **mariadb** | `mariadb:10.11` | iç ağ | liderapi veritabanı |
-| **ldap** | `bitnamilegacy/openldap:latest` | `127.0.0.1:1389` | Kullanıcı + ajan dizini |
-| **ejabberd** | `ejabberd/ecs:24.02` | `127.0.0.1:15280` | XMPP mesajlaşma (API) |
-| **lider-core** | sıfırdan build | iç ağ | Karaf/OSGi yönetim sunucusu |
-| **liderapi** | sıfırdan build | `127.0.0.1:8082` | REST API (JWT auth) |
-| **lider-ui** | sıfırdan build | `127.0.0.1:3001` | Vue.js web arayüzü |
-| **provisioner** | sıfırdan build | — | LDAP + XMPP toplu kayıt |
-| **ahenk** | sıfırdan build | — | Ölçeklenebilir Ahenk ajanı |
-| **prometheus** | `prom/prometheus` | `127.0.0.1:9090` | Metrik toplama |
-| **grafana** | `grafana/grafana` | `127.0.0.1:3000` | Dashboard |
-| **loki** | `grafana/loki` | `127.0.0.1:3100` | Log toplama |
-| **cadvisor** | `gcr.io/cadvisor` | iç ağ | Konteyner metrikleri |
-
-> ⚠️ **Ejabberd versiyon kilidi:** `EJABBERD_VERSION=24.02` sabit tutulmalı.  
-> 24.12 → 25.03 güncellemesi Mnesia bozulması ve SASL auth hatasına yol açıyor ([issue #4366](https://github.com/processone/ejabberd/issues/4366)).
-
----
-
-## Gereksinimler
-
-| Araç | Min. Versiyon |
+| Servis | Rol |
 |---|---|
-| Docker Engine | 25.0+ |
-| Docker Compose | v2.24+ |
-| Python | 3.11+ |
-| Java JDK | 21 (Temurin) |
-| Maven | 3.9+ |
-| Node.js | 16.x |
-| Yarn | 1.22+ |
-| Disk | ~10 GB (imajlar dahil) |
-| RAM | 8 GB+ önerilen |
+| `mariadb` | LiderAhenk domain verisi |
+| `ldap` | kullanici ve ajan dizini |
+| `ejabberd` | XMPP mesajlasma ve presence |
+| `lider-core` | merkezi yonetim cekirdegi |
+| `liderapi` | REST API ve dashboard/domain yuzeyleri |
+| `lider-ui` | web arayuzu |
+| `provisioner` | bootstrap ve seed islemleri |
+| `ahenk` | olceklenebilir agent runtime |
+| `registration-orchestrator` | domain owner olmadan registration gozlemi ve evidence |
+| `platform-exporter` | platform telemetry |
+| `ejabberd-exporter` | ejabberd telemetry |
+| `prometheus` | metric toplama |
+| `grafana` | dashboard ve runtime gorunurlugu |
+| `loki` | log toplama |
 
----
+## Hizli Baslangic
 
-## Hızlı Başlangıç
-
-### 1 — Klonla
-
-```bash
-git clone https://github.com/<kullanici>/liderahenk-test-platform.git
-cd liderahenk-test-platform
-```
-
-### 2 — Ortam değişkenlerini ayarla
+### 1. Repo'yu hazirla
 
 ```bash
+git clone <repo-url> liderahenk-test
+cd liderahenk-test
 cp .env.example .env
-# .env dosyasını düzenle — tüm DEGISTIR değerlerini doldur
 ```
 
-Kritik değişkenler:
+Gereken temel araclar:
+
+- Docker Engine
+- Docker Compose v2
+- Python 3.11+
+
+### 2. Temiz bir ortamla basla
 
 ```bash
-LDAP_ADMIN_PASSWORD=güçlü-şifre
-MYSQL_ROOT_PASSWORD=güçlü-şifre
-XMPP_ADMIN_PASS=güçlü-şifre
-LIDER_PASS=lider-admin-şifresi   # JWT auth için
-```
-
-### 3 — Docker ağlarını oluştur (ilk kurulumda)
-
-```bash
+make clean-hard
 make network-init
 ```
 
-### 4 — Sistemi başlat
+### 3. Platformu kaldir
+
+Hizli profil:
 
 ```bash
-# Temel sistem (Lider + 10 Ahenk)
-make dev-fast
-
-# Gözlemlenebilirlik ile (stock kurulum paritesine daha yakın)
-make dev-fidelity
-
-# Tüm profiller (tracing dahil)
-make dev-full
+make dev-fast N=10
 ```
 
-### 5 — Doğrula
+Ana kabul profili:
 
 ```bash
-make health          # Servis sağlığı
-make token           # JWT token al
-make agents          # Ajan listesi
-make test-contract   # 28 sözleşme testi
-make test-integration # 9 entegrasyon testi
+make dev-fidelity N=10
 ```
 
-### 6 — Arayüzler
+Tracing dahil:
 
-| Arayüz | Adres | Kimlik |
+```bash
+make dev-full N=10
+```
+
+### 4. Runtime'i dogrula
+
+Core runtime lane:
+
+```bash
+make test-runtime-core PROFILE=dev-fidelity N=10
+```
+
+Operasyonel runtime lane:
+
+```bash
+make test-runtime-operational PROFILE=dev-fidelity N=10
+```
+
+Olcek lane:
+
+```bash
+make test-runtime-scale N=10
+```
+
+Yardimci komutlar:
+
+```bash
+make health
+make token
+make agents
+make status
+```
+
+## Dogrulama Akisi
+
+Bu repoda oncelikli dogrulama sirasi runtime-first'tur.
+
+### 1. Runtime Core
+
+`make test-runtime-core`
+
+Bu lane sunlari kontrol eder:
+
+- compose stack kalkti mi
+- konteynerler running mi
+- healthcheck'ler yesil mi
+- `liderapi` auth alinabiliyor mu
+- LDAP, MariaDB ve ejabberd temel operasyonlari calisiyor mu
+
+### 2. Runtime Operational
+
+`make test-runtime-operational`
+
+Bu lane sunlari kontrol eder:
+
+- registration parity
+- UI'de agent gorunurlugu
+- task dispatch
+- policy roundtrip
+- observability hedefleri
+
+### 3. Runtime Scale
+
+`make test-runtime-scale N=10`
+
+Bu lane, VM kullanmadan coklu Ahenk agent senaryosunu dogrular.
+
+### 4. Destekleyici Testler
+
+Runtime lane'lerin altinda destekleyici katmanlar da vardir:
+
+- `make test-contract`
+- `make test-integration`
+- `make test-observability`
+- `make test-e2e-management`
+- `make test-acceptance PROFILE=dev-fidelity`
+
+## Arayuzler
+
+| Arayuz | Adres | Not |
 |---|---|---|
-| Lider UI | http://localhost:3001 | lider-admin / .env'deki LIDER_PASS |
-| Grafana | http://localhost:3000 | admin / admin |
-| Prometheus | http://localhost:9090 | — |
-| Jaeger | http://localhost:16686 | — |
+| Lider UI | http://localhost:3001 | giris: `.env` icindeki `LIDER_USER` / `LIDER_PASS` |
+| Lider API | http://localhost:8082 | dis erisim ucu |
+| Grafana | http://localhost:3000 | varsayilan `admin / admin` |
+| Prometheus | http://localhost:9090 | metrics ve target gorunumu |
+| Jaeger | http://localhost:16686 | yalnizca `make dev-full` ile |
 
----
+## Repo Haritasi
 
-## Dizin Yapısı
+Aktif runtime/build truth icin ilk bakilacak yuzeyler:
 
-```
-liderahenk-test/
-├── compose/
-│   ├── compose.core.yml        # L1+L2: ağlar, mariadb, ldap, ejabberd
-│   ├── compose.lider.yml       # L2: lider-core, liderapi, lider-ui
-│   ├── compose.agents.yml      # L3: provisioner, ahenk (ölçekli)
-│   ├── compose.obs.yml         # L4: prometheus, grafana, loki, cadvisor
-│   ├── compose.tracing.yml     # L4: jaeger, otel-collector
-│   └── compose.chaos.yml       # Kaos: toxiproxy (Oturum 8)
-│
-├── services/
-│   ├── liderapi/               # Maven multi-stage Dockerfile
-│   │   ├── Dockerfile
-│   │   └── lider.properties    # Spring Boot config (jwt.secret, DB, LDAP)
-│   ├── liderui/                # Vue.js + Nginx Dockerfile
-│   │   ├── Dockerfile
-│   │   └── nginx.conf          # API proxy + SPA routing
-│   ├── lidercore/              # .deb paket konteynerizasyon
-│   │   ├── Dockerfile
-│   │   └── entrypoint-core.sh  # systemd bypass, Karaf foreground
-│   ├── ahenk/                  # Python multi-stage Dockerfile
-│   │   ├── Dockerfile
-│   │   └── entrypoint.sh       # jitter/backoff, dinamik ahenk.conf
-│   ├── provisioner/            # LDAP + XMPP toplu kayıt
-│   │   ├── Dockerfile
-│   │   └── provision.py        # idempotent, bitnamilegacy port 1389
-│   ├── ejabberd/
-│   │   ├── ejabberd.yml        # vhost, mod_http_api, mod_register
-│   │   └── entrypoint-ejabberd.sh  # lider_sunucu auto-register
-│   ├── ldap/
-│   │   ├── schema/liderahenk.ldif  # pardusAccount, pardusLider objectClass
-│   │   └── seed/admin-user.ldif
-│   └── mariadb/
-│       └── init.sql            # config_params seed data
-│
-├── adapters/                   # ACL Anti-Corruption Layer
-│   ├── lider_api_adapter.py    # JWT auth + REST (tersine mühendislik)
-│   ├── xmpp_message_adapter.py # ejabberd HTTP API
-│   ├── ldap_schema_adapter.py  # bitnamilegacy port 1389
-│   └── reverse_engineering/
-│       └── openapi_draft.yaml  # bytecode analizinden üretilen API şeması
-│
-├── contracts/                  # Sözleşme testleri (28 test)
-│   ├── conftest.py
-│   ├── test_rest_contract.py
-│   ├── test_ldap_contract.py
-│   └── test_xmpp_contract.py
-│
-├── orchestrator/               # Test senaryo motoru
-│   ├── main.py                 # ScenarioRunner
-│   ├── cli.py                  # CLI arayüzü
-│   └── scenarios/
-│       ├── basic_task.yml
-│       ├── registration_test.yml
-│       └── scale_test.yml
-│
-├── tests/                      # Entegrasyon + ölçek testleri
-│   ├── test_integration.py     # 9 pytest testi
-│   ├── test_scale.py           # @pytest.mark.scale
-│   └── test_session*.sh        # Oturum doğrulama betikleri
-│
-├── observability/
-│   ├── prometheus/
-│   │   ├── prometheus.yml      # 5 scrape target
-│   │   └── alerts.yml          # 5 SLO alert kuralı
-│   ├── grafana/
-│   │   ├── provisioning/       # datasource + dashboard auto-provision
-│   │   └── dashboards/
-│   │       └── liderahenk-slo.json  # 4 panelli SLO dashboard
-│   ├── loki/
-│   │   └── loki-config.yml     # 72h retention
-│   └── otel/
-│       └── otel-config.yml     # OTLP → Jaeger
-│
-├── .env.example                # Tüm ortam değişkenleri
-├── .gitignore
-├── Makefile                    # Tüm komutlar
-├── requirements-test.txt
-└── README.md
+- [Makefile](/home/huma/liderahenk-test/Makefile)
+- [platform/active-surface-map.md](/home/huma/liderahenk-test/platform/active-surface-map.md)
+- [platform/upstream-manifest.yaml](/home/huma/liderahenk-test/platform/upstream-manifest.yaml)
+- [platform/bootstrap/bootstrap-manifest.yaml](/home/huma/liderahenk-test/platform/bootstrap/bootstrap-manifest.yaml)
+
+Temel klasorler:
+
+```text
+compose/            docker compose katmanlari
+services/           calisan servis Dockerfile ve wiring yuzeyi
+platform/           platform governance, contracts, manifests
+platform_runtime/   runtime validation ve reporting kodu
+adapters/           anti-corruption / adapter katmani
+orchestrator/       senaryo ve akis motoru
+observability/      prometheus, grafana, loki konfigurasyonu
+tests/              runtime, parity, observability ve kalite testleri
+docs/               vizyon, gereksinim ve teknik dokumanlar
 ```
 
----
+Not:
 
-## Makefile Komutları
+- `compose.platform.yml` aktif runtime katmanidir
+- `platform/services/registration-orchestrator/` aktif platform servisidir
+- `services/liderapi/patches/` ve `services/liderui/patches/` tek basina
+  build truth kabul edilmez; aktif yuzey icin `wiring/patches` ve
+  `extensions` alanlarina bakilir
+
+## Make Hedefleri
+
+### Baslatma
 
 ```bash
-# ── Başlatma ──────────────────────────────────────────────────
-make network-init        # İlk kurulumda Docker ağlarını oluştur
-make dev-fast            # Hızlı geliştirme profili
-make dev-fidelity        # Gözlemlenebilirlik ile kabul profili
-make dev-full            # + Jaeger + OTel Collector
-make dev-scale N=50      # 50 Ahenk ajanı ile başlat
+make dev-fast N=10
+make dev-fidelity N=10
+make dev-full N=10
+make dev-scale N=20
+```
 
-# ── Durdurma / Temizleme ──────────────────────────────────────
-make stop                # Konteynerleri durdur
-make clean               # Konteyner + volume temizle
-make clean-hard          # İmaj + Mnesia kalıntıları dahil tam temizle
+### Temizlik ve durum
 
-# ── Build ─────────────────────────────────────────────────────
-make build-lider         # Lider servislerini yeniden build et
-make build               # Tüm servisleri build et
-
-# ── Hızlı Erişim ──────────────────────────────────────────────
-make health              # Tüm servis durumu
-make token               # JWT token al (otomatik)
-make agents              # Authenticated ajan listesi
-make status              # docker compose ps
-
-# ── Testler ───────────────────────────────────────────────────
-make test-contract       # 28 sözleşme testi (pytest)
-make test-integration    # 9 entegrasyon testi (pytest)
-make test-scale N=50     # Ölçek testi (50 ajan)
-
-# ── Senaryo Motoru ────────────────────────────────────────────
-make run-scenario S=basic_task.yml
-make run-scenario S=registration_test.yml
-make run-scenario S=scale_test.yml
-
-# ── Log ───────────────────────────────────────────────────────
+```bash
+make stop
+make stop-all
+make clean
+make clean-hard
+make status
 make logs SVC=liderapi
-make logs SVC=lider-core
-make logs SVC=ejabberd
 ```
 
----
+### Runtime ve kabul
 
-## Test Katmanları
-
-Bu proje 4 katmanlı test stratejisi uygular:
-
-```
-┌─────────────────────────────────────┐
-│  Kaos Testleri (Oturum 8)           │  ← Toxiproxy, ağ arızaları
-├─────────────────────────────────────┤
-│  Ölçek Testleri                     │  ← make test-scale N=100
-├─────────────────────────────────────┤
-│  Entegrasyon Testleri (9 test)      │  ← make test-integration
-├─────────────────────────────────────┤
-│  Sözleşme Testleri (28 test)        │  ← make test-contract
-└─────────────────────────────────────┘
+```bash
+make test-runtime-core PROFILE=dev-fast
+make test-runtime-core PROFILE=dev-fidelity
+make test-runtime-operational PROFILE=dev-fidelity
+make test-runtime-scale N=10
+make test-registration-parity
+make test-acceptance PROFILE=dev-fidelity
 ```
 
-### Sözleşme Testleri (28 test)
+### Yardimci testler
 
 ```bash
 make test-contract
-# ✅ 10 REST contract testi (liderapi endpoint'leri)
-# ✅  9 LDAP contract testi (bitnamilegacy, port 1389)
-# ✅  9 XMPP contract testi (ejabberd HTTP API)
-```
-
-Sözleşme testleri **davranışı** test eder, iş mantığını değil. LiderAhenk güncellendiğinde ilk burada bozulma tespit edilir.
-
-### Entegrasyon Testleri (9 test)
-
-```bash
 make test-integration
-# ✅ registration_test senaryosu
-# ✅ basic_task senaryosu
-# ✅ Ajan bağlantı oranı >= %90
-# ✅ LDAP ajan sayısı doğrulama
-# ✅ Authenticated API çağrısı
-# ✅ API idempotency
+make test-observability
+make test-e2e-smoke
+make test-e2e-management
 ```
 
-### Ölçek Testleri
+### Governance ve kalite
 
 ```bash
-# 50 ajan ile test
-make clean-hard
-AHENK_COUNT=50 make dev-fast
-make test-scale N=50
+make audit-platform
+make quality-report
+make test-release-gate PROFILE=dev-fidelity
+make verify-candidate COMPONENT=liderui REF=<upstream-ref>
 ```
 
----
-
-## Gözlemlenebilirlik
-
-### SLO Alert Kuralları
-
-| Alert | Koşul | Seviye |
-|---|---|---|
-| `AgentRegistrationFailed` | Kayıt oranı < %95 | Critical |
-| `XMPPConnectionDrop` | Bağlı ajan < %90 | Critical |
-| `LiderApiHighErrorRate` | HTTP 5xx > %5 | Warning |
-| `TaskDeliveryLatencyHigh` | p95 > 5sn | Warning |
-
-### Grafana Dashboard — 4 Panel
-
-```
-http://localhost:3000 → Dashboards → LiderAhenk SLO Dashboard
-```
-
-- **Bağlı Ahenk Ajan Sayısı** — ejabberd metriği, anlık
-- **liderapi İstek/sn ve Hata Oranı** — HTTP traffic
-- **lider-core JVM Heap** — Karaf bellek kullanımı
-- **Görev Gecikmesi p95** — uçtan uca gecikme
-
----
-
-## Senaryo Motoru
-
-YAML tabanlı test senaryoları. Token yönetimi otomatik — manuel curl gerekmez.
+### Baseline ve evidence
 
 ```bash
-# Mevcut senaryoları listele
-python3 orchestrator/cli.py --list
-
-# Senaryo koştur
-make run-scenario S=basic_task.yml
+make validate-golden-baseline
+make capture-golden-baseline
+make diff-baseline
+make validate-registration-evidence
 ```
 
-Yeni senaryo eklemek:
+## Observability
 
-```yaml
-# orchestrator/scenarios/my_scenario.yml
-name: my_test
-description: "Açıklama"
-setup:
-  min_agents: 5
-steps:
-  - name: send_task
-    action: send_task
-    params:
-      task_type: ECHO
-      target: all
-assertions:
-  - type: no_errors
-```
+Bu platformda observability opsiyonel bir eklenti degil, resmi runtime
+yuzeyidir.
 
----
+Saglanan temel gorunurluk:
 
-## ACL Adapter Katmanı
+- Prometheus scrape target'lari
+- Grafana dashboard'lari
+- Loki log akislari
+- platform ve ejabberd exporter metrikleri
 
-Lider servisleri için Anti-Corruption Layer. Dış sistemlerin detaylarını test kodundan izole eder.
+Runtime kabulunde beklenen:
 
-```
-tests/                          adapters/
-  test_integration.py  ──────→  lider_api_adapter.py   ──→ liderapi:8082
-  test_contract.py     ──────→  xmpp_message_adapter.py ──→ ejabberd:15280
-                       ──────→  ldap_schema_adapter.py  ──→ ldap:1389
-```
+- dashboard'lar acilabilir olmali
+- target'lar `up` olmali
+- log akisi gorunmeli
+- runtime karar raporu telemetry ile desteklenebilmeli
 
-LiderAhenk API değiştiğinde **sadece adapter güncellenir**, test kodu dokunulmaz.
+## Katki ve Gelistirme Notlari
 
-> ⚠️ **Not:** Resmi OpenAPI belgesi mevcut değil. API şeması bytecode analizi ve HTTP trafik yakalama ile tersine mühendislik uygulanarak `adapters/reverse_engineering/openapi_draft.yaml` dosyasına belgelenmiştir.
+Bu repoda yeni degisiklik yaparken once su sirayla okunmali:
 
----
+1. [docs/platform_vizyonu.md](/home/huma/liderahenk-test/docs/platform_vizyonu.md)
+2. [docs/product-requirements.md](/home/huma/liderahenk-test/docs/product-requirements.md)
+3. [Makefile](/home/huma/liderahenk-test/Makefile)
+4. [platform/active-surface-map.md](/home/huma/liderahenk-test/platform/active-surface-map.md)
 
-## Güvenlik
+Calisma kurali:
 
-### LiderAhenk CVE Geçmişi
-
-Bu projenin güvenlik testleri teorik değil — gereklidir:
-
-| CVE | Etki | Sürüm |
-|---|---|---|
-| CVE-2021-3825 | Yetkisiz API ile LDAP kimlik bilgisi sızıntısı | ≤ 2.1.15 |
-| CVE-2026-26023 | Uzaktan Kod İçerme (RCI) | 3.0.0 – 3.3.1 |
-
-### Uygulanan Önlemler
-
-- `bitnamilegacy/openldap` — non-root kullanıcı (osixia terk edildi, CVE dolu)
-- Ahenk konteynerleri `USER ahenk` ile çalışır (root değil)
-- MariaDB dışa port açmaz
-- `liderahenk_core` ağı `internal: true` (internet erişimi yok)
-- ejabberd `mod_register` sadece iç ağa kısıtlı
-- JWT secret: 640-bit Base64, HS512 (minimum 512 bit)
-
-### Planlanan (Oturum 7-8)
-
-- [ ] Trivy CVE tarama (CI pipeline)
-- [ ] Hadolint Dockerfile lint
-- [ ] pip-audit Python bağımlılık tarama
-- [ ] Syft SBOM üretimi
-- [ ] cosign imaj imzalama
-- [ ] `read_only: true` filesystem
-- [ ] `cap_drop: [ALL]`
-
----
-
-## Bilinen Kısıtlamalar ve Çözümler
-
-### 1. Resmi Docker İmajı Yok
-
-Pardus-LiderAhenk GitHub repolarında Dockerfile mevcut değil. Bu proje tüm Lider servislerini sıfırdan build eder:
-
-- `liderapi` → Maven multi-stage (WAR çıktısı, JAR değil)
-- `liderui` → Vue.js + Nginx (node-sass → dart-sass)
-- `lidercore` → debian:bookworm + .deb + systemd bypass
-
-### 2. bitnami/openldap Docker Hub'dan Kaldırıldı
-
-`bitnamilegacy/openldap:latest` kullanılır. Port **1389** (non-root default) — 389 değil.
-
-### 3. OpenAPI Belgesi Yok
-
-Lider API şeması `adapters/reverse_engineering/openapi_draft.yaml` dosyasında bytecode analizinden üretilmiştir.
-
-### 4. Ejabberd Versiyon Kilidi
-
-```bash
-EJABBERD_VERSION=24.02  # .env'de sabit — latest kullanma!
-```
-
-### 5. ilk Kurulumda Ağlar Yok
-
-```bash
-make network-init  # Bir kez çalıştır
-```
-
----
-
-## Katkı
-
-### Yeni Oturum Eklerken
-
-1. `compose/` altına yeni profil ekle
-2. `services/` altına Dockerfile yaz
-3. Adapter varsa `adapters/` altına ekle
-4. `contracts/` altına sözleşme testi yaz
-5. `tests/test_sessionX.sh` ile doğrula
-6. Makefile'a hedef ekle
-
-### Test Çalıştırma Sırası
-
-```bash
-make test-contract      # Önce sözleşme
-make test-integration   # Sonra entegrasyon
-make test-scale N=20    # Son olarak ölçek
-```
-
----
+- once runtime foundation bozulmuyor mu diye bak
+- yeni degisiklikte minimum patch ilkesini koru
+- domain truth'u dogrudan sahteleme
+- insan kullanici ile agent kimligini ayni kabul etme
+- aktif patch yuzeyi icin [platform/patch-inventory.csv](/home/huma/liderahenk-test/platform/patch-inventory.csv) kaydini kontrol et
 
 ## Lisans
 
-Bu proje [LGPL-3.0](LICENSE) lisansı altında dağıtılmaktadır.  
-LiderAhenk bileşenleri kendi lisanslarına tabidir.
-
----
-
-<div align="center">
-
-**Pardus LiderAhenk Test Platform**  
-`make dev-fidelity` → kabul profili hazır.
-
-</div>
+Bu proje [LGPL-3.0](LICENSE) lisansi altindadir. LiderAhenk bilesenleri kendi
+lisanslarina tabidir.

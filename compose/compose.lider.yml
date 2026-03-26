@@ -79,6 +79,8 @@ services:
       XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
       EJABBERD_API: ${EJABBERD_API:-http://ejabberd:5280/api}
       LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
+      # [LIDERUI-2.3.0 BUG FIX] Disable gzip so Nginx sub_filter can rewrite childEntries to children
+      SPRING_APPLICATION_JSON: '{"server":{"compression":{"enabled":false}}}'
     healthcheck:
       test: ["CMD-SHELL", "curl -so /dev/null http://localhost:8080/actuator/health || exit 1"]
       interval: 15s

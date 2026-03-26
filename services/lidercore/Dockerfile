@@ -39,13 +39,13 @@ RUN mkdir -p /tmp/equivs && cd /tmp/equivs \
 
 # lider-server kur — postinst scripti systemd+dbus çağırır,
 # konteyner ortamında çalışmaz. Çözüm:
-# 1. Paketi indir
+# 1. Paketi indir (curl -# -O ile okunabilir progress bar gösterimi)
 # 2. dpkg --unpack ile aç (postinst çalıştırılmaz)
 # 3. postinst sil
 # 4. dpkg --configure ile yapılandır
 RUN apt-get update \
     && cd /tmp \
-    && apt-get download lider-server \
+    && curl -# -O https://repo.liderahenk.org.tr/liderahenk/pool/main/l/lider-server/lider-server_1.4_amd64.deb \
     && dpkg --unpack lider-server_*.deb \
     && rm -f /var/lib/dpkg/info/lider-server.postinst \
     && dpkg --configure lider-server \

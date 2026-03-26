@@ -116,3 +116,10 @@ fi
 echo "[ldap-init] =========================================="
 echo "[ldap-init] ✅ LDAP init tamamlandı"
 echo "[ldap-init] =========================================="
+
+echo "[ldap-init] Bitnami generik test verileri (user01, user02) temizleniyor..."
+
+ldapdelete -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" "cn=user01,ou=users,dc=liderahenk,dc=org" 2>/dev/null || true
+ldapdelete -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" "cn=user02,ou=users,dc=liderahenk,dc=org" 2>/dev/null || true
+
+echo "[ldap-init] ✅ Bitnami test verileri temizlendi"
