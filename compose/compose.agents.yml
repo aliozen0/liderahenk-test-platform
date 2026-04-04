@@ -16,10 +16,19 @@ services:
       - liderahenk_agents
     environment:
       AHENK_COUNT: ${AHENK_COUNT}
+      TOPOLOGY_PROFILE: ${TOPOLOGY_PROFILE:-}
+      OPERATOR_COUNT: ${OPERATOR_COUNT:-}
+      DIRECTORY_USER_COUNT: ${DIRECTORY_USER_COUNT:-}
+      USER_GROUP_COUNT: ${USER_GROUP_COUNT:-}
+      ENDPOINT_GROUP_COUNT: ${ENDPOINT_GROUP_COUNT:-}
+      POLICY_PACK: ${POLICY_PACK:-}
+      SESSION_PACK: ${SESSION_PACK:-}
       LDAP_HOST: ldap
       LDAP_PORT: ${LDAP_PORT}
       LDAP_BASE_DN: ${LDAP_BASE_DN}
       LDAP_USER_BASE_DN: ${LDAP_USER_BASE_DN:-ou=users,dc=liderahenk,dc=org}
+      LDAP_GROUPS_OU: ${LDAP_GROUPS_OU:-ou=Groups,dc=liderahenk,dc=org}
+      LDAP_AGENT_GROUPS_OU: ${LDAP_AGENT_GROUPS_OU:-ou=AgentGroups,dc=liderahenk,dc=org}
       LDAP_ROLE_BASE_DN: ${LDAP_ROLE_BASE_DN:-ou=Roles,dc=liderahenk,dc=org}
       LDAP_ADMIN_USERNAME: ${LDAP_ADMIN_USERNAME}
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}

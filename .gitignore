@@ -41,10 +41,8 @@ artifacts/
 *.bak
 *.orig
 
-# UI test artifacts
-tests/ui/node_modules/
-tests/ui/test-results/
-tests/ui/playwright-report/
-
 docs/*
 !docs/platform_vizyonu.md
+
+# Binary documents
+*.docx

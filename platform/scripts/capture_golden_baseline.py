@@ -20,6 +20,7 @@ def main() -> int:
         source_label=args.source_label,
         env_file=env_file,
         force=bool(args.force),
+        confirm_stock_source=bool(args.confirm_stock_source),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["valid"] else 1

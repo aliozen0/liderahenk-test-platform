@@ -23,11 +23,14 @@ PROFILE ?= dev-fast
 BASELINE_ROOT ?= platform/baselines/golden-install
 BASELINE_ENV_FILE ?=
 BASELINE_SOURCE_LABEL ?=
+BASELINE_CAPTURE_CONFIRM ?=
+BASELINE_PREFLIGHT_ENV_ONLY ?=
+RELEASE_SCENARIO_PACKS ?= session-login-basic,ui-user-policy-roundtrip
 
 # Default agent scale
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev-fast dev-fidelity dev dev-scale dev-obs dev-full build-lider build-agents build-platform build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-runtime-core test-runtime-operational test-runtime-scale test-observability test-evidence test-evidence-isolated run-scenario test-e2e test-e2e-smoke test-e2e-management test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance validate-golden-baseline capture-golden-baseline test-registration-parity diff-baseline validate-registration-evidence
+.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev-fast dev-fidelity dev dev-scale dev-obs dev-full build-lider build-agents build-platform build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-runtime-core test-runtime-operational test-runtime-scale test-observability test-evidence test-evidence-isolated run-legacy-scenario test-e2e test-e2e-smoke test-e2e-management test-unit-gate test-acceptance-summary test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance validate-golden-baseline golden-baseline-status baseline-status golden-baseline-preflight capture-golden-baseline test-registration-parity diff-baseline validate-registration-evidence test-api test-api-quick test-api-data swagger
 
 ## Create external Docker networks required by compose overlays
 network-init:
@@ -152,19 +155,19 @@ status:
 test-contract:
 	@echo "Running contract tests..."
 	@$(MAKE) install-test-deps
-	PYTHONPATH=. pytest contracts/ -v --timeout=30 --tb=short
+	PYTHONPATH=. pytest tests/contracts/ -v --timeout=30 --tb=short
 
 ## REST contract tests only
 test-contract-rest:
-	PYTHONPATH=. pytest contracts/test_rest_contract.py -v --timeout=30
+	PYTHONPATH=. pytest tests/contracts/test_rest_contract.py -v --timeout=30
 
 ## LDAP contract tests only
 test-contract-ldap:
-	PYTHONPATH=. pytest contracts/test_ldap_contract.py -v --timeout=30
+	PYTHONPATH=. pytest tests/contracts/test_ldap_contract.py -v --timeout=30
 
 ## XMPP contract tests only
 test-contract-xmpp:
-	PYTHONPATH=. pytest contracts/test_xmpp_contract.py -v --timeout=30
+	PYTHONPATH=. pytest tests/contracts/test_xmpp_contract.py -v --timeout=30
 
 ## Start observability stack (core + lider + agent + obs)
 dev-obs:
@@ -236,13 +239,13 @@ test-evidence:
 
 ## Disposable isolated evidence run
 test-evidence-isolated:
-	@EVIDENCE_PROJECT_NAME=$(EVIDENCE_PROJECT_NAME) ./scripts/run_evidence_stack.sh
+	@EVIDENCE_PROJECT_NAME=$(EVIDENCE_PROJECT_NAME) ./platform/scripts/run_evidence_stack.sh
 
 ## Generate a markdown/json quality report under artifacts/
 quality-report:
 	@echo "Generating quality report..."
 	@$(MAKE) install-test-deps
-	PYTHONPATH=. python3 scripts/generate_quality_report.py
+	PYTHONPATH=. python3 platform/scripts/generate_quality_report.py
 
 ## Validate docker/runtime readiness for the selected profile
 test-runtime-core:
@@ -270,11 +273,35 @@ validate-golden-baseline:
 	@$(MAKE) install-test-deps
 	PYTHONPATH=. python3 platform/scripts/validate_golden_baseline.py $(BASELINE_ROOT)
 
-## Capture a golden baseline from the active runtime
+## Show concise golden baseline status for operators
+golden-baseline-status:
+	@echo "Checking golden baseline status..."
+	@$(MAKE) install-test-deps
+	@echo "Baseline root: $(BASELINE_ROOT)"
+	PYTHONPATH=. python3 platform/scripts/golden_baseline_status.py $(BASELINE_ROOT)
+
+baseline-status: golden-baseline-status
+
+## Validate stock baseline env and basic reachability before capture
+golden-baseline-preflight:
+	@echo "Running golden baseline preflight..."
+	@if [ -z "$(BASELINE_ENV_FILE)" ]; then \
+		echo "BASELINE_ENV_FILE is required"; \
+		exit 1; \
+	fi
+	@$(MAKE) install-test-deps
+	PYTHONPATH=. python3 platform/scripts/golden_baseline_preflight.py --env-file $(BASELINE_ENV_FILE) $(if $(filter 1 true TRUE yes YES,$(BASELINE_PREFLIGHT_ENV_ONLY)),--env-only,)
+
+## Capture a golden baseline from a verified stock runtime
 capture-golden-baseline:
 	@echo "Capturing golden baseline..."
+	@echo "Source must be a verified stock LiderAhenk installation, not the patched dev runtime."
+	@if [ "$(BASELINE_CAPTURE_CONFIRM)" != "1" ] && [ "$(BASELINE_CAPTURE_CONFIRM)" != "true" ] && [ "$(BASELINE_CAPTURE_CONFIRM)" != "TRUE" ] && [ "$(BASELINE_CAPTURE_CONFIRM)" != "yes" ] && [ "$(BASELINE_CAPTURE_CONFIRM)" != "YES" ]; then \
+		echo "Refusing capture without BASELINE_CAPTURE_CONFIRM=1"; \
+		exit 1; \
+	fi
 	@$(MAKE) install-test-deps
-	PYTHONPATH=. python3 platform/scripts/capture_golden_baseline.py $(BASELINE_ROOT) $(if $(BASELINE_ENV_FILE),--env-file $(BASELINE_ENV_FILE),) $(if $(BASELINE_SOURCE_LABEL),--source-label "$(BASELINE_SOURCE_LABEL)",)
+	PYTHONPATH=. python3 platform/scripts/capture_golden_baseline.py $(BASELINE_ROOT) $(if $(BASELINE_ENV_FILE),--env-file $(BASELINE_ENV_FILE),) $(if $(BASELINE_SOURCE_LABEL),--source-label "$(BASELINE_SOURCE_LABEL)",) $(if $(filter 1 true TRUE yes YES,$(BASELINE_CAPTURE_CONFIRM)),--confirm-stock-source,)
 
 ## Run exact registration parity checks
 test-registration-parity:
@@ -295,10 +322,10 @@ validate-registration-evidence:
 	@$(MAKE) install-test-deps
 	PYTHONPATH=. python3 platform/scripts/validate_registration_evidence.py
 
-## Run scenario (usage: make run-scenario S=registration_test.yml)
-run-scenario:
+## Run legacy orchestrator scenario (usage: make run-legacy-scenario S=registration_test.yml)
+run-legacy-scenario:
 	@$(MAKE) install-test-deps
-	PYTHONPATH=. python3 orchestrator/cli.py --scenario orchestrator/scenarios/$(S)
+	PYTHONPATH=. python3 orchestrator/cli.py --scenario orchestrator/legacy_scenarios/$(S)
 
 ## Run Playwright E2E tests
 test-e2e:
@@ -324,13 +351,30 @@ test-e2e-management:
 	python3 -m playwright install chromium
 	PYTHONPATH=. python3 -m pytest tests/e2e/specs/ -v -m "e2e and management" --timeout=180 --html=artifacts/e2e/management.html --self-contained-html --junitxml=artifacts/e2e/management.junit.xml
 
+## Run unit test gate (Sprint 1-4 full regression suite)
+test-unit-gate:
+	@echo "Running unit test gate..."
+	@$(MAKE) install-test-deps
+	PYTHONPATH=. python3 -m pytest tests/test_topology_profile_loader.py tests/test_scenario_pack_loader.py tests/test_scenario_runtime_runner.py tests/test_directory_topology_seed.py tests/test_ui_api_mutation_contract.py tests/test_runtime_support_summary.py tests/test_liderapi_ldap_bind_policy.py tests/test_bootstrap_runtime.py tests/test_ahenk_liderapi_gate.py tests/test_compose_network_topology.py tests/test_registration_evidence.py -v --timeout=120 --tb=short
+
+## Generate acceptance summary artifact (JSON + Markdown)
+test-acceptance-summary:
+	@echo "Generating acceptance summary..."
+	@$(MAKE) install-test-deps
+	@echo "Scenario packs: $${PLATFORM_SCENARIO_PACKS:-$(RELEASE_SCENARIO_PACKS)}"
+	AHENK_COUNT=$(N) PYTHONPATH=. PLATFORM_RUNTIME_PROFILE=$(PROFILE) python3 platform/scripts/generate_acceptance_summary.py --profile $(PROFILE) --agents $(N) $(if $(filter 1 true TRUE yes YES,$(REQUIRE_PASS)),--require-pass,)
+
 ## Run a release-oriented quality gate
 test-release-gate:
 	@echo "Running release gate..."
+	@echo "Release scenario packs: $(RELEASE_SCENARIO_PACKS)"
+	@echo "Golden baseline root: $(BASELINE_ROOT)"
+	@$(MAKE) test-unit-gate
 	@$(MAKE) test-runtime-core PROFILE=$(PROFILE)
-	@$(MAKE) test-runtime-operational PROFILE=$(PROFILE)
+	@PLATFORM_SCENARIO_PACKS="$(RELEASE_SCENARIO_PACKS)" $(MAKE) test-runtime-operational PROFILE=$(PROFILE)
+	@PLATFORM_SCENARIO_PACKS="$(RELEASE_SCENARIO_PACKS)" $(MAKE) test-acceptance-summary PROFILE=$(PROFILE) N=$(N) REQUIRE_PASS=1
 	@$(MAKE) validate-golden-baseline
-	@$(MAKE) test-acceptance PROFILE=$(PROFILE)
+	@PLATFORM_SCENARIO_PACKS="$(RELEASE_SCENARIO_PACKS)" $(MAKE) test-acceptance PROFILE=$(PROFILE)
 	@$(MAKE) diff-baseline PROFILE=$(PROFILE)
 	@$(MAKE) validate-registration-evidence
 	@$(MAKE) test-observability
@@ -362,4 +406,52 @@ test-acceptance:
 	$(MAKE) test-contract
 	$(MAKE) test-runtime-core PROFILE=$(PROFILE)
 	$(MAKE) test-registration-parity
-	$(MAKE) run-scenario S=policy_roundtrip.yml
+	$(MAKE) run-legacy-scenario S=policy_roundtrip.yml
+
+## Run full API health check against all 43 endpoints (11 modules)
+test-api:
+	@./tests/test_api_health.sh http://localhost:8082
+
+## Run API data integrity test — cross-validates API vs DB vs LDAP
+test-api-data:
+	@./tests/test_api_data.sh http://localhost:8082
+
+## Open Swagger UI with auto-auth (serves on port 9999)
+swagger:
+	@fuser -k 9999/tcp 2>/dev/null || true
+	@echo "\033[1mSwagger UI: http://localhost:9999/swagger-proxy.html\033[0m"
+	@cd tools && python3 -m http.server 9999 --bind 0.0.0.0
+
+## Quick API smoke test — 10 core endpoints only
+test-api-quick:
+	@echo "\033[1m═══ Quick API Smoke Test ═══\033[0m"
+	@T=$$(curl -s -X POST http://localhost:8082/api/auth/signin -H 'Content-Type: application/json' -d '{"username":"lider-admin","password":"secret"}' | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('token',''))" 2>/dev/null); \
+	if [ -z "$$T" ]; then echo "\033[0;31m❌ Login failed\033[0m"; exit 1; fi; \
+	OK=0; FAIL=0; \
+	for ep in \
+	  "POST /api/dashboard/info application/json {}" \
+	  "GET  /api/lider/computer/ou" \
+	  "POST /api/lider/agent-info/list application/json {\"pageNumber\":1,\"pageSize\":5}" \
+	  "POST /api/policy/list application/json {\"pageNumber\":1,\"pageSize\":5}" \
+	  "POST /api/lider/user/users application/json {\"searchDn\":\"dc=liderahenk,dc=org\"}" \
+	  "GET  /api/lider/settings/configurations" \
+	  "GET  /api/server/list" \
+	  "POST /api/ad/configurations application/json {}" \
+	  "GET  /api/lider-info/version" \
+	  "POST /api/get-plugin-task-list application/json {}" \
+	; do \
+	  M=$$(echo $$ep | awk '{print $$1}'); \
+	  P=$$(echo $$ep | awk '{print $$2}'); \
+	  CT=$$(echo $$ep | awk '{print $$3}'); \
+	  BD=$$(echo $$ep | awk '{$$1="";$$2="";$$3=""; print}' | sed 's/^  *//'); \
+	  ARGS="-s -o /dev/null -w %{http_code} -X $$M -H Authorization:\ Bearer\ $$T"; \
+	  if [ -n "$$CT" ]; then ARGS="$$ARGS -H Content-Type:\ $$CT"; fi; \
+	  if [ -n "$$BD" ]; then ARGS="$$ARGS -d $$BD"; fi; \
+	  CODE=$$(eval curl $$ARGS http://localhost:8082$$P 2>/dev/null); \
+	  if [ "$$CODE" = "200" ]; then echo "  \033[0;32m✅ $$CODE\033[0m $$P"; OK=$$((OK+1)); \
+	  else echo "  \033[0;31m❌ $$CODE\033[0m $$P"; FAIL=$$((FAIL+1)); fi; \
+	done; \
+	echo ""; \
+	TOTAL=$$((OK+FAIL)); \
+	echo "  Sonuç: $$OK/$$TOTAL başarılı"; \
+	if [ $$FAIL -gt 0 ]; then exit 1; fi

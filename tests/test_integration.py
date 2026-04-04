@@ -29,7 +29,7 @@ class TestRegistrationScenario:
 
     def test_registration_scenario_passes(self, runner):
         """registration_test.yml senaryosu PASS olmalı."""
-        results = runner.run("orchestrator/scenarios/registration_test.yml")
+        results = runner.run("orchestrator/legacy_scenarios/registration_test.yml")
         assert results["passed"], f"registration_test başarısız: {results['steps']}"
 
     def test_ldap_agent_count(self, runner):
@@ -51,7 +51,7 @@ class TestBasicScenario:
 
     def test_basic_scenario_passes(self, runner):
         """basic_task.yml senaryosu PASS olmalı."""
-        results = runner.run("orchestrator/scenarios/basic_task.yml")
+        results = runner.run("orchestrator/legacy_scenarios/basic_task.yml")
         assert results["passed"], f"basic_task başarısız: {results['steps']}"
 
     def test_api_health(self, runner):

@@ -22,15 +22,44 @@ Hedefimiz "patch'lenmiş" (yamalanmış) bir ürün yaratmak değil, gerçek bir
 
 Bu vizyonun repodaki resmi karşılıkları şunlardır:
 
+### Contracts & Bootstrap
 - `platform/bootstrap/bootstrap-manifest.yaml`
 - `platform/contracts/directory-model.yaml`
 - `platform/contracts/ldap-roots.yaml`
 - `platform/contracts/registration-state-machine.yaml`
+- `platform/contracts/runtime-readiness.yaml`
+- `platform/contracts/scenario-pack-contract.yaml`
+- `platform/contracts/topology-profile-contract.yaml`
 - `platform/contracts/ui-data-flow.md`
 - `platform/contracts/websocket-contract.md`
-- `platform/services/registration-orchestrator/`
+
+### Topology & Senaryo
+- `platform/topology/` — çalışma profili tanımları ve loader
+- `platform/scenarios/` — senaryo YAML paketleri ve loader
+- `platform_runtime/scenario_runner.py` — senaryo çalıştırıcı
+- `platform_runtime/runtime_readiness.py` — operasyonel hazırlık kontrolleri
+
+### Adapter & Orchestrator
+- `adapters/lider_api_adapter.py` — LiderAPI dışsal adapter (Adapter Pattern)
+- `orchestrator/main.py` — platform orkestratörü
+- `services/provisioner/provision.py` — idempotent provisioner
+
+### Extension Katmanı (Wiring)
+- `services/liderapi/extensions/` — Spring extension modülleri (Strategy Pattern, Provider Pattern)
+- `services/liderapi/wiring/patches/queue/` — ince, izlenebilir queue patch'leri
+- `services/ahenk/hooks/` — container-mode runtime hook'ları
 
 Ayrıca iki resmi çalışma profili vardır:
 
 - `dev-fast`: hızlı geliştirme ve smoke testi
 - `dev-fidelity`: stock kurulum paritesine en yakın kabul profili
+
+## Mimari Kararlar (Design Patterns)
+
+Platform katmanı şu mühendislik prensiplerini kullanır:
+
+- **Strategy Pattern:** `LdapBindPolicy` — upstream sadece interface'e bağımlı, concrete implementation platform tarafında
+- **Adapter Pattern:** `LiderApiAdapter` — upstream API'yi dışarıdan saran, sürüm bağımsız katman
+- **Provider Pattern:** `AgentDirectoryPresenceResolver`, `DashboardComputerMetricsProvider` — upstream'e provider injection ile genişletme
+- **Queue Patch:** Upstream kaynak dosyaya ince, izlenebilir ve revert edilebilir patch'ler
+

@@ -35,7 +35,7 @@ ldap_roots:
   user_root: ou=users,dc=liderahenk,dc=org
   user_group_root: ou=Groups,dc=liderahenk,dc=org
   agent_root: ou=Ahenkler,dc=liderahenk,dc=org
-  agent_group_root: ou=Agent,ou=Groups,dc=liderahenk,dc=org
+  agent_group_root: ou=AgentGroups,dc=liderahenk,dc=org
   role_root: ou=Roles,dc=liderahenk,dc=org
 
 bootstrap_pipeline:
@@ -55,7 +55,7 @@ seed_sets:
     - lider-admin
   groups:
     - Groups
-    - Agent
+    - AgentGroups
     - DomainAdmins
   roles:
     - liderahenk

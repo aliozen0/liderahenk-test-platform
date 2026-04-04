@@ -1,0 +1,33 @@
+version: 1
+owner: platform
+
+required_fields:
+  - name
+  - requires
+  - steps
+
+requires_fields:
+  - topology_profile
+
+optional_fields:
+  - description
+  - evidence
+  - runtime_checks
+
+step_conventions:
+  official_mutation_surfaces:
+    - create_user_via_ui
+    - create_group_via_ui
+    - assign_user_to_group_via_ui
+    - create_policy_via_ui
+    - assign_policy_to_group_via_ui
+  acceptance_surfaces:
+    - simulate_login
+    - verify_effect
+    - collect_ui_tree_snapshot
+    - collect_membership_snapshot
+    - collect_policy_snapshot
+
+runtime_check_conventions:
+  - policy_roundtrip
+  - ui_login

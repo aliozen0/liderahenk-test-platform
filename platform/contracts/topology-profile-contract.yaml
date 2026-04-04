@@ -1,0 +1,49 @@
+version: 1
+owner: platform
+
+selection:
+  env_var: TOPOLOGY_PROFILE
+  runtime_defaults:
+    dev-fast: dev-fast
+    dev-fidelity: dev-fidelity
+
+override_env:
+  OPERATOR_COUNT:
+    type: int
+    min: 1
+    target: operators.count
+  DIRECTORY_USER_COUNT:
+    type: int
+    min: 1
+    target: directory_users.count
+  USER_GROUP_COUNT:
+    type: int
+    min: 1
+    target: user_groups.count
+  ENDPOINT_GROUP_COUNT:
+    type: int
+    min: 1
+    target: endpoint_groups.count
+  POLICY_PACK:
+    type: string
+    target: policy_pack
+  SESSION_PACK:
+    type: string
+    target: session_pack
+  LIDER_LDAP_BIND_MODE:
+    type: string
+    target: ldap_bind_mode
+
+export_env:
+  - TOPOLOGY_PROFILE
+  - OPERATOR_COUNT
+  - DIRECTORY_USER_COUNT
+  - USER_GROUP_COUNT
+  - ENDPOINT_GROUP_COUNT
+  - POLICY_PACK
+  - SESSION_PACK
+  - LIDER_LDAP_BIND_MODE
+
+rules:
+  managed_endpoint_source: runtime_argument
+  managed_endpoint_env: AHENK_COUNT

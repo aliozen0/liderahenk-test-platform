@@ -11,6 +11,8 @@ on:
 jobs:
   runtime-lane:
     runs-on: ubuntu-22.04
+    env:
+      RELEASE_SCENARIO_PACKS: session-login-basic,ui-user-policy-roundtrip
 
     steps:
       - name: Checkout repository
@@ -52,12 +54,11 @@ jobs:
             make test-runtime-core PROFILE=dev-fast
           fi
 
-      - name: Run nightly operational lane
+      - name: Run release gate
         if: github.event_name == 'schedule'
         run: |
-          make test-runtime-operational PROFILE=dev-fidelity
-          make test-runtime-scale N=10
-          make test-e2e-management
+          echo "Release scenario packs: $RELEASE_SCENARIO_PACKS"
+          make test-release-gate PROFILE=dev-fidelity N=10
 
       - name: Generate quality report
         if: always()

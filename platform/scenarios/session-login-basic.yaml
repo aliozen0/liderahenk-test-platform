@@ -1,0 +1,13 @@
+name: session-login-basic
+description: Minimal login/session acceptance pack over the seeded topology.
+requires:
+  topology_profile: dev-fidelity
+runtime_checks:
+  - ui_login
+  - membership_snapshot_contract
+  - session_effect_contract
+steps:
+  - simulate_login
+  - verify_effect
+  - collect_ui_tree_snapshot
+  - collect_membership_snapshot

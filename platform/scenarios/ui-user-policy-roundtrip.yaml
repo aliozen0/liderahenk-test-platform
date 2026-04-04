@@ -1,0 +1,20 @@
+name: ui-user-policy-roundtrip
+description: Official UI mutation path for user, group and policy roundtrip validation.
+requires:
+  topology_profile: dev-fidelity
+runtime_checks:
+  - ui_user_policy_roundtrip
+  - policy_roundtrip
+  - policy_effect_probe
+  - policy_snapshot_contract
+steps:
+  - create_user_via_ui
+  - create_group_via_ui
+  - assign_user_to_group_via_ui
+  - create_policy_via_ui
+  - assign_policy_to_group_via_ui
+  - simulate_login
+  - verify_effect
+  - collect_ui_tree_snapshot
+  - collect_membership_snapshot
+  - collect_policy_snapshot

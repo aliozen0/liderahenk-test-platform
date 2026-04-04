@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from platform_runtime.registration_evidence import validate_registration_evidence
+from platform_runtime.registration_evidence import (
+    validate_registration_evidence,
+    write_registration_evidence_report,
+)
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -94,6 +97,39 @@ def _write_valid_evidence_bundle(tmp_path: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
+    _write_json(
+        tmp_path / "runtime-operational-report.json",
+        {
+            "schemaVersion": 1,
+            "reportType": "runtime-operational",
+            "status": "pass",
+            "profile": "dev-fast",
+            "topology": {"name": "dev-fast"},
+            "support": {
+                "mutationSupport": {
+                    "supportedDeclaredMutationSteps": [
+                        "create_group_via_ui",
+                        "create_policy_via_ui",
+                    ],
+                    "unsupportedDeclaredMutationSteps": [
+                        "create_user_via_ui",
+                    ],
+                },
+                "scenarios": {
+                    "activeScenarios": ["ui-user-policy-roundtrip"],
+                },
+                "sessionSupport": {
+                    "supportedDeclaredSessionSteps": [
+                        "simulate_login",
+                        "collect_membership_snapshot",
+                    ],
+                    "unsupportedDeclaredSessionSteps": [
+                        "verify_effect",
+                    ],
+                },
+            },
+        },
+    )
     return tmp_path
 
 
@@ -101,6 +137,13 @@ def test_registration_evidence_accepts_valid_bundle(tmp_path):
     _write_valid_evidence_bundle(tmp_path)
     report = validate_registration_evidence(tmp_path)
     assert report["valid"] is True, report["errors"]
+    assert report["runtimeSupport"]["runtime-operational-report.json"]["activeScenarios"] == [
+        "ui-user-policy-roundtrip"
+    ]
+    assert report["runtimeSupport"]["runtime-operational-report.json"]["supportedDeclaredSessionSteps"] == [
+        "simulate_login",
+        "collect_membership_snapshot",
+    ]
 
 
 def test_registration_evidence_rejects_run_id_mismatch(tmp_path):
@@ -131,3 +174,17 @@ def test_registration_evidence_rejects_false_green_pass_verdict(tmp_path):
     report = validate_registration_evidence(tmp_path)
     assert report["valid"] is False
     assert "registration-verdict.json: pass verdict contains failed checks" in report["errors"]
+
+
+def test_registration_evidence_report_renders_runtime_support_context(tmp_path):
+    _write_valid_evidence_bundle(tmp_path)
+    report = validate_registration_evidence(tmp_path)
+
+    _, markdown_path = write_registration_evidence_report(report, output_dir=tmp_path)
+
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "## Runtime Support Context" in markdown
+    assert "ui-user-policy-roundtrip" in markdown
+    assert "create_group_via_ui" in markdown
+    assert "collect_membership_snapshot" in markdown
+    assert "verify_effect" in markdown

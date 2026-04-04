@@ -39,7 +39,9 @@ services:
       LDAP_AGENT_BASE_DN: ${LDAP_AGENT_BASE_DN}
       AHENK_COUNT: ${AHENK_COUNT}
       ENABLE_LEGACY_REGISTRATION_SIM: ${ENABLE_LEGACY_REGISTRATION_SIM:-0}
-      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
+      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-all}
+      LIDER_LDAP_BIND_MODE: ${LIDER_LDAP_BIND_MODE:-authenticated-user}
+      LIDER_FORCE_LDAP_ADMIN_BIND: ${LIDER_FORCE_LDAP_ADMIN_BIND:-0}
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f karaf || exit 1"]
       interval: 15s
@@ -59,6 +61,7 @@ services:
         condition: service_healthy
     networks:
       - liderahenk_core
+      - liderahenk_agents
       - liderahenk_external
       - liderahenk_obs
     ports:
@@ -78,7 +81,9 @@ services:
       XMPP_RESOURCE: ${XMPP_RESOURCE}
       XMPP_ADMIN_PASS: ${XMPP_ADMIN_PASS}
       EJABBERD_API: ${EJABBERD_API:-http://ejabberd:5280/api}
-      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
+      LIDER_LDAP_BIND_MODE: ${LIDER_LDAP_BIND_MODE:-authenticated-user}
+      LIDER_FORCE_LDAP_ADMIN_BIND: ${LIDER_FORCE_LDAP_ADMIN_BIND:-0}
+      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-all}
       # [LIDERUI-2.3.0 BUG FIX] Disable gzip so Nginx sub_filter can rewrite childEntries to children
       SPRING_APPLICATION_JSON: '{"server":{"compression":{"enabled":false}}}'
     healthcheck:
@@ -96,7 +101,8 @@ services:
         LIDERUI_UPSTREAM_REF: ${LIDERUI_UPSTREAM_REF:-}
     restart: unless-stopped
     depends_on:
-      - liderapi
+      liderapi:
+        condition: service_healthy
     networks:
       - liderahenk_external
     ports:
@@ -104,13 +110,16 @@ services:
     environment:
       LIDER_API_URL: ${LIDER_API_URL}
       LIDER_API_VERSION: ${LIDER_API_VERSION}
-      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-v1-broad}
+      LIDER_FEATURE_PROFILE: ${LIDER_FEATURE_PROFILE:-all}
       UI_DISABLED_FEATURES: ${UI_DISABLED_FEATURES}
 
 networks:
   liderahenk_core:
     external: true
     name: liderahenk-test_liderahenk_core
+  liderahenk_agents:
+    external: true
+    name: liderahenk-test_liderahenk_agents
   liderahenk_external:
     external: true
     name: liderahenk-test_liderahenk_external

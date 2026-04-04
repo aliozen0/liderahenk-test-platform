@@ -12,7 +12,7 @@ roots:
     dn: ou=Ahenkler,dc=liderahenk,dc=org
     description: Agent device subtree.
   agent_group_root:
-    dn: ou=Agent,ou=Groups,dc=liderahenk,dc=org
+    dn: ou=AgentGroups,dc=liderahenk,dc=org
     description: Computer group subtree used by policy assignment.
   role_root:
     dn: ou=Roles,dc=liderahenk,dc=org

@@ -11,6 +11,9 @@ import yaml
 
 REGISTRATION_EVIDENCE_CONTRACT_PATH = Path("platform/contracts/registration-evidence.yaml")
 DEFAULT_PLATFORM_ARTIFACTS_DIR = Path(os.environ.get("PLATFORM_ARTIFACTS_DIR", "artifacts/platform"))
+FALLBACK_PLATFORM_ARTIFACTS_DIR = Path(
+    os.environ.get("PLATFORM_RUNTIME_FALLBACK_ARTIFACTS_DIR", "artifacts/platform-local")
+)
 
 
 def _utc_now() -> str:
@@ -55,6 +58,49 @@ def _load_events(path: Path, *, errors: list[str]) -> list[dict[str, Any]]:
             continue
         events.append(payload)
     return events
+
+
+def _runtime_support_snapshot(artifacts_root: Path, *, errors: list[str]) -> dict[str, Any] | None:
+    snapshots: dict[str, Any] = {}
+    for filename in ("runtime-core-report.json", "runtime-operational-report.json"):
+        payload = _load_json(artifacts_root / filename, label=filename, errors=errors)
+        if payload is None:
+            continue
+        support = payload.get("support") or {}
+        mutation = support.get("mutationSupport") or {}
+        scenarios = support.get("scenarios") or {}
+        session = support.get("sessionSupport") or {}
+        supported_steps = (
+            mutation.get("supportedDeclaredSteps")
+            or mutation.get("supportedDeclaredMutationSteps")
+            or []
+        )
+        unsupported_steps = (
+            mutation.get("unsupportedDeclaredSteps")
+            or mutation.get("unsupportedDeclaredMutationSteps")
+            or []
+        )
+        supported_session_steps = (
+            session.get("supportedDeclaredSteps")
+            or session.get("supportedDeclaredSessionSteps")
+            or []
+        )
+        unsupported_session_steps = (
+            session.get("unsupportedDeclaredSteps")
+            or session.get("unsupportedDeclaredSessionSteps")
+            or []
+        )
+        snapshots[filename] = {
+            "status": payload.get("status"),
+            "profile": payload.get("profile"),
+            "topologyProfile": (payload.get("topology") or {}).get("name"),
+            "activeScenarios": scenarios.get("activeScenarios", []),
+            "supportedDeclaredMutationSteps": supported_steps,
+            "unsupportedDeclaredMutationSteps": unsupported_steps,
+            "supportedDeclaredSessionSteps": supported_session_steps,
+            "unsupportedDeclaredSessionSteps": unsupported_session_steps,
+        }
+    return snapshots or None
 
 
 def _require_fields(
@@ -249,6 +295,8 @@ def validate_registration_evidence(root: Path | None = None) -> dict[str, Any]:
     if verdict is not None and last_event_status is not None and verdict.get("status") != last_event_status:
         errors.append("registration-verdict.json: status does not match last event status")
 
+    runtime_support = _runtime_support_snapshot(artifacts_root, errors=errors)
+
     report = {
         "schemaVersion": 1,
         "artifactsRoot": str(artifacts_root),
@@ -260,6 +308,7 @@ def validate_registration_evidence(root: Path | None = None) -> dict[str, Any]:
             "eventCount": len(events),
             "status": verdict.get("status") if verdict else None,
         },
+        "runtimeSupport": runtime_support,
         "errors": errors,
     }
     return report
@@ -270,11 +319,6 @@ def write_registration_evidence_report(
     *,
     output_dir: Path | None = None,
 ) -> tuple[Path, Path]:
-    artifacts_dir = output_dir or DEFAULT_PLATFORM_ARTIFACTS_DIR
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-    json_path = artifacts_dir / "registration-evidence-report.json"
-    markdown_path = artifacts_dir / "registration-evidence-report.md"
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     lines = [
         "# Registration Evidence Validation",
         "",
@@ -291,5 +335,29 @@ def write_registration_evidence_report(
             lines.append(f"- {item}")
     else:
         lines.append("- Evidence bundle is complete and internally consistent.")
-    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return json_path, markdown_path
+    if report.get("runtimeSupport"):
+        lines.extend(["", "## Runtime Support Context", ""])
+        for filename, snapshot in report["runtimeSupport"].items():
+            lines.append(f"- `{filename}` profile=`{snapshot.get('profile')}` status=`{snapshot.get('status')}`")
+            lines.append(
+                "  "
+                f"topology=`{snapshot.get('topologyProfile')}`, "
+                f"active_scenarios=`{', '.join(snapshot.get('activeScenarios', [])) or 'none'}`, "
+                f"supported_mutations=`{', '.join(snapshot.get('supportedDeclaredMutationSteps', [])) or 'none'}`, "
+                f"unsupported_mutations=`{', '.join(snapshot.get('unsupportedDeclaredMutationSteps', [])) or 'none'}`, "
+                f"supported_sessions=`{', '.join(snapshot.get('supportedDeclaredSessionSteps', [])) or 'none'}`, "
+                f"unsupported_sessions=`{', '.join(snapshot.get('unsupportedDeclaredSessionSteps', [])) or 'none'}`"
+            )
+
+    def _write_to(directory: Path) -> tuple[Path, Path]:
+        directory.mkdir(parents=True, exist_ok=True)
+        json_path = directory / "registration-evidence-report.json"
+        markdown_path = directory / "registration-evidence-report.md"
+        json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return json_path, markdown_path
+
+    try:
+        return _write_to(output_dir or DEFAULT_PLATFORM_ARTIFACTS_DIR)
+    except PermissionError:
+        return _write_to(FALLBACK_PLATFORM_ARTIFACTS_DIR)

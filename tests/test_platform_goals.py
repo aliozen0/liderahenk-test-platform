@@ -436,7 +436,7 @@ class TestGoal5_Testability:
 
     def test_scenario_files_exist(self):
         """Senaryo YAML dosyaları mevcut olmalı."""
-        base = "/home/huma/liderahenk-test/orchestrator/scenarios"
+        base = "/home/huma/liderahenk-test/orchestrator/legacy_scenarios"
         files = ["basic_task.yml", "registration_test.yml", "scale_test.yml"]
         existing = [f for f in files if os.path.exists(os.path.join(base, f))]
         result = len(existing) == len(files)

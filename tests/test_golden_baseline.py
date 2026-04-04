@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from hashlib import sha256
 from pathlib import Path
 
-from platform_runtime.golden_baseline import validate_golden_baseline
+import pytest
+
+from platform_runtime.golden_baseline import capture_golden_baseline, validate_golden_baseline
 
 
 PNG_1X1 = (
@@ -47,7 +52,7 @@ def _build_complete_baseline(tmp_path: Path) -> Path:
                 "agentLdapBaseDn": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "ou=Ahenkler,dc=liderahenk,dc=org"},
                 "userLdapBaseDn": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "ou=users,dc=liderahenk,dc=org"},
                 "userGroupLdapBaseDn": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "ou=Groups,dc=liderahenk,dc=org"},
-                "ahenkGroupLdapBaseDn": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "ou=Agent,ou=Groups,dc=liderahenk,dc=org"},
+                "ahenkGroupLdapBaseDn": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "ou=AgentGroups,dc=liderahenk,dc=org"},
                 "xmppServiceName": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "liderahenk.org"},
                 "xmppResource": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1", "value": "LiderAPI"},
                 "ldapPassword": {"present": True, "source": "c_config.liderConfigParams", "sha256": "1"},
@@ -144,3 +149,93 @@ def test_validator_handles_invalid_manifest_json(tmp_path):
     report = validate_golden_baseline(tmp_path)
     assert report["valid"] is False
     assert any("manifest.json: invalid json" in item for item in report["errors"])
+
+
+def test_validator_marks_pending_capture_baseline(tmp_path):
+    (tmp_path / "api-captures").mkdir()
+    (tmp_path / "ui-evidence").mkdir()
+    _write_json(
+        tmp_path / "manifest.json",
+        {
+            "schemaVersion": 1,
+            "baselineName": "stock-liderahenk",
+            "status": "capture-pending",
+            "source": {"kind": "stock-liderahenk-install", "label": "pending-capture"},
+            "capturedAt": None,
+            "captureContext": {},
+            "files": {},
+        },
+    )
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "schemaVersion": 1,
+            "capturedAt": None,
+            "source": "stock-liderahenk-install",
+            "fields": {},
+        },
+    )
+    _write_json(
+        tmp_path / "ldap-tree.json",
+        {
+            "schemaVersion": 1,
+            "capturedAt": None,
+            "entries": [],
+        },
+    )
+    report = validate_golden_baseline(tmp_path)
+    assert report["valid"] is False
+    assert report["status"] == "pending-capture"
+    assert report["manifestStatus"] == "capture-pending"
+    assert "canonical golden baseline not captured yet (manifest status: capture-pending)" in report["errors"]
+
+
+def test_capture_requires_explicit_stock_confirmation(tmp_path):
+    with pytest.raises(RuntimeError, match="confirm-stock-source"):
+        capture_golden_baseline(tmp_path)
+
+
+def test_golden_baseline_status_reports_pending_capture(tmp_path):
+    (tmp_path / "api-captures").mkdir()
+    (tmp_path / "ui-evidence").mkdir()
+    _write_json(
+        tmp_path / "manifest.json",
+        {
+            "schemaVersion": 1,
+            "baselineName": "stock-liderahenk",
+            "status": "capture-pending",
+            "source": {"kind": "stock-liderahenk-install", "label": "pending-capture"},
+            "capturedAt": None,
+            "captureContext": {},
+            "files": {},
+        },
+    )
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "schemaVersion": 1,
+            "capturedAt": None,
+            "source": "stock-liderahenk-install",
+            "fields": {},
+        },
+    )
+    _write_json(
+        tmp_path / "ldap-tree.json",
+        {
+            "schemaVersion": 1,
+            "capturedAt": None,
+            "entries": [],
+        },
+    )
+    result = subprocess.run(
+        [sys.executable, "platform/scripts/golden_baseline_status.py", str(tmp_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "."},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "pending-capture"
+    assert payload["valid"] is False
+    assert payload["message"] == "Canonical baseline pending capture."

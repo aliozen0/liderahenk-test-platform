@@ -177,7 +177,10 @@ class ScenarioRunner:
                 entry = self._select_agent_entry(params.get("agent_id"))
                 selected_ou_dn = params.get(
                     "selected_ou_dn",
-                    f"ou=Agent,ou=Groups,{os.environ.get('LDAP_BASE_DN', 'dc=liderahenk,dc=org')}",
+                    os.environ.get(
+                        "LDAP_AGENT_GROUPS_OU",
+                        f"ou=AgentGroups,{os.environ.get('LDAP_BASE_DN', 'dc=liderahenk,dc=org')}",
+                    ),
                 )
                 group = self.api.create_computer_group(group_name, [entry], selected_ou_dn)
                 self.state["last_group"] = group

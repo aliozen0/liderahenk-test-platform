@@ -23,6 +23,15 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _request_failure_text(req) -> str:
+    failure = getattr(req, "failure", None)
+    if isinstance(failure, dict):
+        return failure.get("errorText", "unknown")
+    if isinstance(failure, str):
+        return failure
+    return "unknown"
+
+
 def _test_failed(node: pytest.Item) -> bool:
     for phase in ("setup", "call"):
         report = getattr(node, f"rep_{phase}", None)
@@ -114,9 +123,7 @@ def ui_page(
     page.on("pageerror", lambda exc: page_errors.append(str(exc)))
     page.on(
         "requestfailed",
-        lambda req: failed_requests.append(
-            f"{req.method} {req.url} -> {(req.failure or {}).get('errorText', 'unknown')}"
-        ),
+        lambda req: failed_requests.append(f"{req.method} {req.url} -> {_request_failure_text(req)}"),
     )
 
     yield page
@@ -152,7 +159,10 @@ def ui_page(
                 artifact_dir / "metadata.json",
                 json.dumps(metadata, ensure_ascii=False, indent=2),
             )
-            context.tracing.stop(path=str(artifact_dir / "trace.zip"))
+            try:
+                context.tracing.stop(path=str(artifact_dir / "trace.zip"))
+            except Exception:
+                context.tracing.stop()
         else:
             context.tracing.stop()
     finally:

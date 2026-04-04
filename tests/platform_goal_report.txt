@@ -1,6 +1,6 @@
 
 ======================================================================
-  📊 LiderAhenk Platform Hedef Skoru: 18/20 (90%)
+  📊 LiderAhenk Platform Hedef Skoru: 22/24 (92%)
 ======================================================================
   ✅ Core servisler çalışıyor
      → MariaDB, LDAP, ejabberd ✓
@@ -9,7 +9,7 @@
   ✅ Gözlemlenebilirlik servisleri çalışıyor
      → Prometheus, Grafana, Loki ✓
   ✅ LDAP gerçek veri dönüyor
-     → # numEntries: 22
+     → # numEntries: 44
   ✅ ejabberd kayıtlı kullanıcılar
      → 11 kullanıcı kayıtlı
   ✅ MariaDB tablolar mevcut
@@ -27,12 +27,18 @@ C_CO
      → 10 ajan, toplam 11 kullanıcı
   ❌ Provisioner tamamlandı
      → Konteyner bulunamadı
+  ✅ c_agent sayısı eşleşiyor
+     → 10/10
+  ✅ Dashboard sayısı eşleşiyor
+     → 10/10
+  ✅ Computer tree sayısı eşleşiyor
+     → 10/10
   ✅ JWT token alınabiliyor
      → Token alındı
   ✅ Authenticated API erişimi
      → Bağlantı hatası
   ✅ Lider UI yükleniyor
-     → Content-Length: 1142 bytes
+     → Content-Length: 1400 bytes
   ✅ Sözleşme test dosyaları mevcut
      → 3/3 dosya
   ✅ Entegrasyon test dosyaları mevcut
@@ -40,10 +46,12 @@ C_CO
   ✅ Senaryo dosyaları mevcut
      → 3/3 dosya
   ✅ ACL adapter katmanı mevcut
-     → 3/3 dosya
+     → 4/4 dosya
+  ✅ Release gate yüzeyi mevcut
+     → 6/6 dosya
   ✅ Prometheus veri topluyor
-     → 5/5 target UP
+     → 8/8 target UP
   ✅ Grafana dashboard erişilebilir
   ✅ Grafana veri alıyor
-     → 5 metrik sonucu
+     → 8 metrik sonucu
 ======================================================================

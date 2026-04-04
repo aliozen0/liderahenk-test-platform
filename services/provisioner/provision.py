@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 # ===========================================================
 # Provisioner — İdempotent Toplu Ajan Kaydı + LDAP Şema Yükleme
 # ===========================================================
 # Bitnamilegacy OpenLDAP (port 1389) + ejabberd HTTP API uyumlu
-# 1. LiderAhenk LDAP şemasını yükle (pardusAccount, pardusLider)
-# 2. lider-admin kullanıcısını oluştur (JWT auth için)
-# 3. AHENK_COUNT kadar ajan için LDAP + XMPP kaydı yap
+# 1. Topology kaynakli user/group seed'ini uygula
+# 2. AHENK_COUNT kadar ajan için LDAP + XMPP kaydı yap
+# 3. Endpoint group seed'ini agent kaydindan sonra uygula
 
 import os
 import sys
@@ -15,6 +16,7 @@ import hashlib
 import base64
 import ldap3
 import requests
+
 
 # --- Yapılandırma ---
 N            = int(os.environ["AHENK_COUNT"])
@@ -33,14 +35,15 @@ ADMIN_PASS   = os.environ["LDAP_ADMIN_PASSWORD"]
 AHENK_OU_DN  = os.environ.get("LDAP_AGENT_BASE_DN", f"ou=Ahenkler,{BASE_DN}")
 USERS_OU_DN = os.environ.get("LDAP_USER_BASE_DN", f"ou=users,{BASE_DN}")
 ROLES_OU_DN = os.environ.get("LDAP_ROLE_BASE_DN", f"ou=Roles,{BASE_DN}")
-GROUPS_OU_DN = f"ou=Groups,{BASE_DN}"
-AGENT_GROUPS_OU_DN = f"ou=Agent,{GROUPS_OU_DN}"
+GROUPS_OU_DN = os.environ.get("LDAP_GROUPS_OU", f"ou=Groups,{BASE_DN}")
+AGENT_GROUPS_OU_DN = os.environ.get("LDAP_AGENT_GROUPS_OU", f"ou=AgentGroups,{BASE_DN}")
+LEGACY_AGENT_GROUPS_OU_DN = f"ou=Agent,ou=Groups,{BASE_DN}"
 
 MAX_RETRIES  = 30
 RETRY_WAIT   = 5
 
-# --- LiderAhenk LDAP Şeması ---
-# Kaynak: https://github.com/Pardus-LiderAhenk/lider-ahenk-installer/blob/master/src/conf/liderahenk.ldif
+# --- Legacy LiderAhenk LDAP Şeması helper'lari ---
+# Not: Ilk dilimde schema/admin root ownership'i ldap-init tarafinda kalir.
 LIDERAHENK_SCHEMA_DN = "cn=liderahenk,cn=schema,cn=config"
 LIDERAHENK_SCHEMA_ATTRS = {
     "objectClass": ["olcSchemaConfig"],
@@ -75,6 +78,57 @@ LIDERAHENK_SCHEMA_ATTRS = {
 # Admin kullanıcısı — JWT auth için
 LIDER_ADMIN_UID = os.environ.get("LIDER_ADMIN_UID", "lider-admin")
 LIDER_ADMIN_PASS = os.environ.get("LIDER_ADMIN_PASS", "secret")
+SEEDED_USER_PASS = os.environ.get("SEEDED_USER_PASSWORD", LIDER_ADMIN_PASS)
+TOPOLOGY_PROFILE = os.environ.get("TOPOLOGY_PROFILE", os.environ.get("PLATFORM_RUNTIME_PROFILE", "legacy"))
+POLICY_PACK = os.environ.get("POLICY_PACK", "baseline-standard")
+SESSION_PACK = os.environ.get("SESSION_PACK", "login-basic")
+
+
+def _count_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer, got {raw!r}") from exc
+    if value < 0:
+        raise RuntimeError(f"{name} must be >= 0, got {value}")
+    return value
+
+
+OPERATOR_COUNT = _count_env("OPERATOR_COUNT", 1)
+DIRECTORY_USER_COUNT = _count_env("DIRECTORY_USER_COUNT", 0)
+USER_GROUP_COUNT = _count_env("USER_GROUP_COUNT", 0)
+ENDPOINT_GROUP_COUNT = _count_env("ENDPOINT_GROUP_COUNT", 0)
+
+DIRECTORY_USER_ARCHETYPES = ("standard", "privileged", "restricted", "shared")
+USER_GROUP_ARCHETYPES = ("standard", "privileged", "restricted", "shared")
+ENDPOINT_GROUP_ARCHETYPES = ("standard", "restricted", "privileged")
+
+DEFAULT_OPERATOR_TEMPLATES = (
+    {
+        "uid": LIDER_ADMIN_UID,
+        "cn": "Lider Admin",
+        "sn": "Admin",
+        "mail": "admin@liderahenk.org",
+        "liderPrivilege": ["ROLE_ADMIN", "ROLE_USER"],
+    },
+    {
+        "uid": "ops-operator",
+        "cn": "Ops Operator",
+        "sn": "Operator",
+        "mail": "ops-operator@liderahenk.org",
+        "liderPrivilege": ["ROLE_USER"],
+    },
+    {
+        "uid": "policy-operator",
+        "cn": "Policy Operator",
+        "sn": "Operator",
+        "mail": "policy-operator@liderahenk.org",
+        "liderPrivilege": ["ROLE_USER"],
+    },
+)
 
 
 def _user_dn(uid: str) -> str:
@@ -89,6 +143,10 @@ def _group_dn(cn: str) -> str:
     return f"cn={cn},{GROUPS_OU_DN}"
 
 
+def _agent_group_dn(cn: str) -> str:
+    return f"cn={cn},{AGENT_GROUPS_OU_DN}"
+
+
 def _agent_owner_dn() -> str:
     return _user_dn(LIDER_ADMIN_UID)
 
@@ -97,6 +155,239 @@ def _ssha_hash(password: str) -> str:
     salt = os.urandom(8)
     sha1_digest = hashlib.sha1(password.encode("utf-8") + salt).digest()
     return "{SSHA}" + base64.b64encode(sha1_digest + salt).decode("ascii")
+
+
+def _operator_specs() -> list[dict[str, object]]:
+    specs: list[dict[str, object]] = []
+    for index in range(OPERATOR_COUNT):
+        if index < len(DEFAULT_OPERATOR_TEMPLATES):
+            spec = dict(DEFAULT_OPERATOR_TEMPLATES[index])
+        else:
+            sequence = index + 1
+            uid = f"operator-{sequence:03d}"
+            spec = {
+                "uid": uid,
+                "cn": f"Operator {sequence:03d}",
+                "sn": "Operator",
+                "mail": f"{uid}@liderahenk.org",
+                "liderPrivilege": ["ROLE_USER"],
+            }
+        spec["dn"] = _user_dn(str(spec["uid"]))
+        specs.append(spec)
+    return specs
+
+
+def _directory_user_specs() -> list[dict[str, object]]:
+    specs: list[dict[str, object]] = []
+    for index in range(DIRECTORY_USER_COUNT):
+        archetype = DIRECTORY_USER_ARCHETYPES[index % len(DIRECTORY_USER_ARCHETYPES)]
+        ordinal = index // len(DIRECTORY_USER_ARCHETYPES) + 1
+        uid = f"user-{archetype}-{ordinal:03d}"
+        specs.append(
+            {
+                "uid": uid,
+                "dn": _user_dn(uid),
+                "cn": f"{archetype.title()} User {ordinal:03d}",
+                "sn": archetype.title(),
+                "mail": f"{uid}@liderahenk.org",
+                "liderPrivilege": ["ROLE_USER"],
+            }
+        )
+    return specs
+
+
+def _user_group_name(index: int) -> str:
+    if index < len(USER_GROUP_ARCHETYPES):
+        return f"ug-{USER_GROUP_ARCHETYPES[index]}"
+    return f"ug-{index + 1:03d}"
+
+
+def _endpoint_group_name(index: int) -> str:
+    if index < len(ENDPOINT_GROUP_ARCHETYPES):
+        return f"eg-{ENDPOINT_GROUP_ARCHETYPES[index]}"
+    return f"eg-{index + 1:03d}"
+
+
+def _round_robin_members(member_dns: list[str], bucket_count: int) -> list[list[str]]:
+    buckets = [[] for _ in range(bucket_count)]
+    if bucket_count <= 0:
+        return buckets
+    for index, member_dn in enumerate(member_dns):
+        buckets[index % bucket_count].append(member_dn)
+    return buckets
+
+
+def _user_group_specs(
+    directory_users: list[dict[str, object]],
+    operators: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    if USER_GROUP_COUNT <= 0:
+        return []
+    default_member = str((operators or [{"dn": _user_dn(LIDER_ADMIN_UID)}])[0]["dn"])
+    buckets = _round_robin_members([str(user["dn"]) for user in directory_users], USER_GROUP_COUNT)
+    specs: list[dict[str, object]] = []
+    for index in range(USER_GROUP_COUNT):
+        name = _user_group_name(index)
+        specs.append(
+            {
+                "dn": _group_dn(name),
+                "cn": name,
+                "objectClass": ["groupOfNames", "top"],
+                "member": buckets[index] or [default_member],
+            }
+        )
+    return specs
+
+
+def _agent_dns() -> list[str]:
+    return [f"cn=ahenk-{index:03d},{AHENK_OU_DN}" for index in range(1, N + 1)]
+
+
+def _endpoint_group_specs() -> list[dict[str, object]]:
+    if ENDPOINT_GROUP_COUNT <= 0:
+        return []
+    buckets = _round_robin_members(_agent_dns(), ENDPOINT_GROUP_COUNT)
+    specs: list[dict[str, object]] = []
+    for index in range(ENDPOINT_GROUP_COUNT):
+        if not buckets[index]:
+            continue
+        name = _endpoint_group_name(index)
+        specs.append(
+            {
+                "dn": _agent_group_dn(name),
+                "cn": name,
+                "objectClass": ["groupOfNames", "pardusDeviceGroup", "top"],
+                "member": buckets[index],
+                "liderGroupType": ["AHENK"],
+            }
+        )
+    return specs
+
+
+def _ensure_seed_user(conn: ldap3.Connection, spec: dict[str, object], *, password: str) -> str:
+    attrs = {
+        "objectClass": [
+            "inetOrgPerson",
+            "organizationalPerson",
+            "person",
+            "pardusAccount",
+            "pardusLider",
+            "top",
+        ],
+        "uid": str(spec["uid"]),
+        "cn": str(spec["cn"]),
+        "sn": str(spec["sn"]),
+        "userPassword": _ssha_hash(password),
+        "mail": str(spec["mail"]),
+        "liderPrivilege": list(spec.get("liderPrivilege", ["ROLE_USER"])),
+    }
+    conn.add(str(spec["dn"]), attributes=attrs)
+    if conn.result["result"] == 0:
+        return "CREATED"
+    if conn.result["result"] == 68:
+        return "EXISTS"
+    raise RuntimeError(f"LDAP seed user failed: {spec['dn']} -> {conn.result}")
+
+
+def _ensure_group_entry(conn: ldap3.Connection, spec: dict[str, object]) -> str:
+    attrs = {
+        "objectClass": list(spec["objectClass"]),
+        "cn": str(spec["cn"]),
+        "member": list(spec["member"]),
+    }
+    extra_multi_value_attrs: dict[str, list[str]] = {}
+    for key, value in spec.items():
+        if key in {"dn", "objectClass", "cn", "member"}:
+            continue
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            normalized = [str(item) for item in value if item is not None and str(item) != ""]
+            if normalized:
+                extra_multi_value_attrs[key] = normalized
+        else:
+            normalized_value = str(value)
+            if normalized_value:
+                extra_multi_value_attrs[key] = [normalized_value]
+    attrs.update(extra_multi_value_attrs)
+
+    conn.add(str(spec["dn"]), attributes=attrs)
+    if conn.result["result"] == 0:
+        return "CREATED"
+    if conn.result["result"] != 68:
+        raise RuntimeError(f"LDAP seed group failed: {spec['dn']} -> {conn.result}")
+
+    changes = {"member": [(ldap3.MODIFY_REPLACE, list(spec["member"]))]}
+    for key, values in extra_multi_value_attrs.items():
+        changes[key] = [(ldap3.MODIFY_REPLACE, values)]
+    conn.modify(str(spec["dn"]), changes)
+    if conn.result["result"] != 0:
+        raise RuntimeError(f"LDAP seed group update failed: {spec['dn']} -> {conn.result}")
+    return "UPDATED"
+
+
+def ensure_seeded_directory_identity():
+    operator_specs = _operator_specs()
+    directory_user_specs = _directory_user_specs()
+    user_group_specs = _user_group_specs(directory_user_specs, operator_specs)
+
+    if not operator_specs and not directory_user_specs and not user_group_specs:
+        print("[provisioner] no directory identity seed requested")
+        return
+
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        created_users = 0
+        for spec in operator_specs + directory_user_specs:
+            result = _ensure_seed_user(conn, spec, password=SEEDED_USER_PASS)
+            if result == "CREATED":
+                created_users += 1
+
+        created_groups = 0
+        updated_groups = 0
+        for spec in user_group_specs:
+            result = _ensure_group_entry(conn, spec)
+            if result == "CREATED":
+                created_groups += 1
+            elif result == "UPDATED":
+                updated_groups += 1
+
+        print(
+            "[provisioner] directory seed ready: "
+            f"profile={TOPOLOGY_PROFILE}, operators={len(operator_specs)}, "
+            f"directory_users={len(directory_user_specs)}, "
+            f"user_groups={len(user_group_specs)}, created_users={created_users}, "
+            f"created_groups={created_groups}, updated_groups={updated_groups}"
+        )
+    finally:
+        conn.unbind()
+
+
+def ensure_seeded_endpoint_groups():
+    endpoint_group_specs = _endpoint_group_specs()
+    if not endpoint_group_specs:
+        print("[provisioner] no endpoint-group seed requested")
+        return
+
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        created = 0
+        updated = 0
+        for spec in endpoint_group_specs:
+            result = _ensure_group_entry(conn, spec)
+            if result == "CREATED":
+                created += 1
+            elif result == "UPDATED":
+                updated += 1
+        print(
+            "[provisioner] endpoint-group seed ready: "
+            f"profile={TOPOLOGY_PROFILE}, endpoint_groups={len(endpoint_group_specs)}, "
+            f"created={created}, updated={updated}, policy_pack={POLICY_PACK}, session_pack={SESSION_PACK}"
+        )
+    finally:
+        conn.unbind()
 
 
 def wait_for_ldap():
@@ -272,40 +563,39 @@ def create_lider_admin_user():
         conn.unbind()
 
 
+def _require_base_entry(conn: ldap3.Connection, dn: str, label: str) -> None:
+    found = conn.search(dn, "(objectClass=*)", search_scope=ldap3.BASE, attributes=["dn"])
+    if not found or not conn.entries:
+        raise RuntimeError(
+            f"[provisioner] gerekli LDAP root eksik: {label} -> {dn}. "
+            "Bu root ldap-init tarafinda olusturulmalidir."
+        )
+
+
 def ensure_ou_ahenkler():
-    """ou=Ahenkler OU'sunu oluştur (yoksa)."""
+    """Agent root ownership'i ldap-init'tedir; provisioner yalnizca varligini dogrular."""
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
-        conn.add(AHENK_OU_DN, "organizationalUnit", {"ou": "Ahenkler"})
-        if conn.result["result"] == 0:
-            print(f"[provisioner] ✅ OU oluşturuldu: {AHENK_OU_DN}")
-        elif conn.result["result"] == 68:  # entryAlreadyExists
-            print(f"[provisioner] ℹ️  OU zaten mevcut: {AHENK_OU_DN}")
-        else:
-            print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+        _require_base_entry(conn, AHENK_OU_DN, "agent-root")
+        print(f"[provisioner] ✅ agent root hazir: {AHENK_OU_DN}")
     finally:
         conn.unbind()
 
 
 def ensure_user_tree():
-    """Kanonik kullanıcı subtree'sini oluştur."""
+    """User root ownership'i ldap-init'tedir; provisioner yalnizca varligini dogrular."""
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
-        conn.add(USERS_OU_DN, "organizationalUnit", {"ou": "users"})
-        if conn.result["result"] == 0:
-            print(f"[provisioner] ✅ OU oluşturuldu: {USERS_OU_DN}")
-        elif conn.result["result"] == 68:
-            print(f"[provisioner] ℹ️  OU zaten mevcut: {USERS_OU_DN}")
-        else:
-            print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+        _require_base_entry(conn, USERS_OU_DN, "user-root")
+        print(f"[provisioner] ✅ user root hazir: {USERS_OU_DN}")
     finally:
         conn.unbind()
 
 
 def ensure_roles_ou():
-    """ou=Roles OU'sunu ve liderahenk rol grubunu oluştur.
+    """Role root ldap-init tarafinda bulunur; provisioner topology role binding'lerini seed eder.
     example-registration plugin'i CSV'deki group sütununa göre
     bu OU altında rol grubu arar."""
     role_group_dn = _role_dn("liderahenk")
@@ -314,14 +604,8 @@ def ensure_roles_ou():
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
-        # 1. ou=Roles oluştur
-        conn.add(ROLES_OU_DN, "organizationalUnit", {"ou": "Roles"})
-        if conn.result["result"] == 0:
-            print(f"[provisioner] ✅ OU oluşturuldu: {ROLES_OU_DN}")
-        elif conn.result["result"] == 68:
-            print(f"[provisioner] ℹ️  OU zaten mevcut: {ROLES_OU_DN}")
-        else:
-            print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+        _require_base_entry(conn, ROLES_OU_DN, "role-root")
+        _require_base_entry(conn, GROUPS_OU_DN, "user-group-root")
 
         # 2. liderahenk rol grubu oluştur
         # Registration yetkilendirmesi agent identity (istemci) uzerinden izlenir.
@@ -345,42 +629,121 @@ def ensure_roles_ou():
             raise RuntimeError(f"Rol grubu oluşturma hatası: {conn.result}")
 
         # 3. Domain admin yetkisi user-group root altinda tutulur.
-        admin_member_dn = _user_dn(LIDER_ADMIN_UID)
+        admin_member_dns = [str(spec["dn"]) for spec in _operator_specs()] or [_user_dn(LIDER_ADMIN_UID)]
         attrs_admin = {
             "objectClass": ["groupOfNames", "pardusLider", "top"],
             "cn": "DomainAdmins",
-            "member": [admin_member_dn],
+            "member": admin_member_dns,
             "liderPrivilege": ["ROLE_DOMAIN_ADMIN"],
             "liderGroupType": ["USER"],
         }
-        conn.add(admin_group_dn, attributes=attrs_admin)
-        if conn.result["result"] == 0:
+        result = _ensure_group_entry(conn, {"dn": admin_group_dn, **attrs_admin})
+        if result == "CREATED":
             print(f"[provisioner] ✅ Domain Admin rol baglantisi oluşturuldu: {admin_group_dn}")
-        elif conn.result["result"] == 68:
-            print(f"[provisioner] ℹ️  Domain Admin rol baglantisi zaten mevcut: {admin_group_dn}")
+        elif result == "UPDATED":
+            print(f"[provisioner] ✅ Domain Admin rol baglantisi guncellendi: {admin_group_dn}")
         else:
-            raise RuntimeError(f"Domain Admin rol baglantisi hatası: {conn.result}")
+            print(f"[provisioner] ℹ️  Domain Admin rol baglantisi zaten mevcut: {admin_group_dn}")
 
     finally:
         conn.unbind()
 
 
 def ensure_group_tree():
-    """UI computer-group ve policy akışı için gerekli LDAP ağacını oluştur."""
+    """Group root ownership'i ldap-init'tedir; provisioner yalnizca varligini dogrular."""
     server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
     conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
     try:
-        for dn, ou_value in (
-            (GROUPS_OU_DN, "Groups"),
-            (AGENT_GROUPS_OU_DN, "Agent"),
-        ):
-            conn.add(dn, "organizationalUnit", {"ou": ou_value})
+        _require_base_entry(conn, GROUPS_OU_DN, "user-group-root")
+        _require_base_entry(conn, AGENT_GROUPS_OU_DN, "agent-group-root")
+        print(f"[provisioner] ✅ group roots hazir: {GROUPS_OU_DN}, {AGENT_GROUPS_OU_DN}")
+    finally:
+        conn.unbind()
+
+
+def _entry_exists(conn: ldap3.Connection, dn: str) -> bool:
+    found = conn.search(dn, "(objectClass=*)", search_scope=ldap3.BASE, attributes=["dn"])
+    return bool(found and conn.entries)
+
+
+def migrate_legacy_agent_group_root():
+    if LEGACY_AGENT_GROUPS_OU_DN == AGENT_GROUPS_OU_DN:
+        return
+
+    server = ldap3.Server(LDAP_HOST, port=LDAP_PORT, get_info=ldap3.NONE)
+    conn = ldap3.Connection(server, user=ADMIN_DN, password=ADMIN_PASS, auto_bind=True)
+    try:
+        if not _entry_exists(conn, LEGACY_AGENT_GROUPS_OU_DN):
+            print(f"[provisioner] ℹ️  legacy agent-group root bulunmadi: {LEGACY_AGENT_GROUPS_OU_DN}")
+            return
+
+        conn.search(
+            LEGACY_AGENT_GROUPS_OU_DN,
+            "(objectClass=*)",
+            search_scope=ldap3.LEVEL,
+            attributes=["dn"],
+        )
+        child_dns = [entry.entry_dn for entry in conn.entries]
+        moved = 0
+        deleted_duplicates = 0
+        failures: list[dict[str, str]] = []
+
+        for child_dn in child_dns:
+            rdn = child_dn.split(",", 1)[0]
+            target_dn = f"{rdn},{AGENT_GROUPS_OU_DN}"
+            if _entry_exists(conn, target_dn):
+                conn.delete(child_dn)
+                if conn.result["result"] == 0:
+                    deleted_duplicates += 1
+                else:
+                    failures.append(
+                        {
+                            "dn": child_dn,
+                            "action": "delete_legacy_duplicate",
+                            "result": str(conn.result),
+                        }
+                    )
+                continue
+
+            conn.modify_dn(child_dn, rdn, new_superior=AGENT_GROUPS_OU_DN, delete_old_rdn=True)
             if conn.result["result"] == 0:
-                print(f"[provisioner] ✅ OU oluşturuldu: {dn}")
-            elif conn.result["result"] == 68:
-                print(f"[provisioner] ℹ️  OU zaten mevcut: {dn}")
+                moved += 1
             else:
-                print(f"[provisioner] ⚠️  OU oluşturma sonucu: {conn.result}")
+                failures.append(
+                    {
+                        "dn": child_dn,
+                        "action": "move_to_agent_group_root",
+                        "result": str(conn.result),
+                    }
+                )
+
+        conn.search(
+            LEGACY_AGENT_GROUPS_OU_DN,
+            "(objectClass=*)",
+            search_scope=ldap3.LEVEL,
+            attributes=["dn"],
+        )
+        if not conn.entries:
+            conn.delete(LEGACY_AGENT_GROUPS_OU_DN)
+            if conn.result["result"] != 0:
+                failures.append(
+                    {
+                        "dn": LEGACY_AGENT_GROUPS_OU_DN,
+                        "action": "delete_legacy_root",
+                        "result": str(conn.result),
+                    }
+                )
+
+        if failures:
+            print(
+                "[provisioner] ⚠️  legacy agent-group root migration partial: "
+                f"moved={moved}, deleted_duplicates={deleted_duplicates}, failures={failures}"
+            )
+        else:
+            print(
+                "[provisioner] ✅ legacy agent-group root normalized: "
+                f"moved={moved}, deleted_duplicates={deleted_duplicates}"
+            )
     finally:
         conn.unbind()
 
@@ -458,13 +821,14 @@ def main():
     wait_for_ldap()
     wait_for_ejabberd()
 
-    # Not: LDAP şeması ve admin kullanıcısı artık ldap-init servisi tarafından
-    # otomatik olarak yönetiliyor (compose.core.yml). Provisioner sadece
-    # ajan kaydı yapıyor.
+    # Not: LDAP şeması, root OU'lar ve primer admin hesabı ldap-init tarafından
+    # yönetilir. Provisioner topology tabanli user/group/endpoint-group seed ile
+    # agent registration akisindan sorumludur.
 
     ensure_user_tree()
     ensure_ou_ahenkler()
     ensure_group_tree()
+    ensure_seeded_directory_identity()
     ensure_roles_ou()
 
     created_xmpp = 0
@@ -488,6 +852,9 @@ def main():
 
         status_icon = "🆕" if xmpp_result == "CREATED" else "✓"
         print(f"  [{status_icon}] {agent_id} — XMPP:{xmpp_result} LDAP:{ldap_result}")
+
+    ensure_seeded_endpoint_groups()
+    migrate_legacy_agent_group_root()
 
     # Doğrulama
     verify_registrations()

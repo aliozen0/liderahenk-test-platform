@@ -22,6 +22,9 @@ runtime_profiles:
           - ldap-init
           - ejabberd
           - db-migrate
+        recreate_before_up:
+          - ldap-init
+          - db-migrate
         wait_for:
           mariadb: healthy
           ldap: healthy
@@ -49,6 +52,8 @@ runtime_profiles:
         services:
           - provisioner
           - registration-orchestrator
+        recreate_before_up:
+          - provisioner
         no_deps: true
         wait_for:
           provisioner: completed
@@ -93,6 +98,9 @@ runtime_profiles:
           - cadvisor
           - mysqld-exporter
           - ejabberd-exporter
+        recreate_before_up:
+          - ldap-init
+          - db-migrate
         wait_for:
           mariadb: healthy
           ldap: healthy
@@ -129,6 +137,8 @@ runtime_profiles:
           - provisioner
           - registration-orchestrator
           - platform-exporter
+        recreate_before_up:
+          - provisioner
         no_deps: true
         wait_for:
           provisioner: completed

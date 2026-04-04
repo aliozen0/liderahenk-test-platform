@@ -53,6 +53,7 @@ COPY --from=builder /build/ahenk /app/ahenk
 
 COPY services/ahenk/dummy_ahenk.py /app/dummy_ahenk.py
 COPY services/ahenk/container_patches.py /opt/ahenk-patches/container_patches.py
+COPY services/ahenk/liderapi_gate.py /opt/ahenk-patches/liderapi_gate.py
 COPY services/ahenk/sitecustomize.py /opt/ahenk-patches/sitecustomize.py
 COPY services/ahenk/entrypoint.sh /entrypoint.sh
 COPY services/ahenk/hooks /opt/ahenk-patches/hooks

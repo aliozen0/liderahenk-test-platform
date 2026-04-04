@@ -16,8 +16,27 @@ LDAP_BASE_DN="${LDAP_BASE_DN:-dc=liderahenk,dc=org}"
 LDAP_ADMIN_DN="cn=${LDAP_ADMIN_USERNAME:-admin},${LDAP_BASE_DN}"
 LDAP_ADMIN_PW="${LDAP_ADMIN_PASSWORD:-DEGISTIR}"
 LDAP_USERS_OU="${LDAP_USERS_OU:-ou=users,${LDAP_BASE_DN}}"
+LDAP_GROUPS_OU="${LDAP_GROUPS_OU:-ou=Groups,${LDAP_BASE_DN}}"
+LDAP_AGENT_GROUPS_OU="${LDAP_AGENT_GROUPS_OU:-ou=AgentGroups,${LDAP_BASE_DN}}"
+LDAP_ROLES_OU="${LDAP_ROLES_OU:-ou=Roles,${LDAP_BASE_DN}}"
+LDAP_AGENTS_OU="${LDAP_AGENT_BASE_DN:-ou=Ahenkler,${LDAP_BASE_DN}}"
 LIDER_ADMIN_UID="${LIDER_ADMIN_UID:-lider-admin}"
 LIDER_ADMIN_PASS="${LIDER_ADMIN_PASS:-secret}"
+
+ensure_ou() {
+  ENTRY_DN="$1"
+  OU_VALUE="$2"
+  LDIF_PATH="$3"
+  cat > "${LDIF_PATH}" << EOF
+dn: ${ENTRY_DN}
+objectClass: organizationalUnit
+ou: ${OU_VALUE}
+EOF
+
+  ldapadd -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" -f "${LDIF_PATH}" 2>&1 || {
+    echo "[ldap-init] ℹ️  OU zaten mevcut: ${ENTRY_DN}"
+  }
+}
 
 echo "[ldap-init] LDAP bekleniyor: ${LDAP_HOST}:${LDAP_PORT}..."
 for i in $(seq 1 30); do
@@ -44,17 +63,27 @@ else
   echo "[ldap-init] ℹ️  Şema zaten yüklü — SKIP"
 fi
 
-# ─── Adım 2: Admin Kullanıcısı (SSHA) ─────────────────────
-echo "[ldap-init] Kullanıcı OU kontrol ediliyor..."
-cat > /tmp/users-ou.ldif << EOF
-dn: ${LDAP_USERS_OU}
-objectClass: organizationalUnit
-ou: users
+if ! ldapsearch -Y EXTERNAL -H ldapi:/// -b "cn=liderahenk,cn=schema,cn=config" "(objectClass=olcSchemaConfig)" olcObjectClasses 2>/dev/null \
+  | grep -q "NAME 'pardusDeviceGroup'"; then
+  echo "[ldap-init] Eksik pardusDeviceGroup şeması ekleniyor..."
+  cat > /tmp/liderahenk-schema-device-group.ldif << EOF
+dn: cn=liderahenk,cn=schema,cn=config
+changetype: modify
+add: olcObjectClasses
+olcObjectClasses: ( 2.4.2.42.1.9.7.8.1.1.6.5 NAME 'pardusDeviceGroup' AUXILIARY MAY ( liderGroupType ) )
 EOF
+  ldapmodify -Y EXTERNAL -H ldapi:/// -f /tmp/liderahenk-schema-device-group.ldif 2>&1 || {
+    echo "[ldap-init] ℹ️  pardusDeviceGroup zaten ekli veya modify sonucu yukarıda"
+  }
+fi
 
-ldapadd -x -H "ldap://${LDAP_HOST}:${LDAP_PORT}" -D "${LDAP_ADMIN_DN}" -w "${LDAP_ADMIN_PW}" -f /tmp/users-ou.ldif 2>&1 || {
-  echo "[ldap-init] ℹ️  Kullanıcı OU zaten mevcut"
-}
+# ─── Adım 2: Admin Kullanıcısı (SSHA) ─────────────────────
+echo "[ldap-init] LDAP kokleri kontrol ediliyor..."
+ensure_ou "${LDAP_USERS_OU}" "users" /tmp/users-ou.ldif
+ensure_ou "${LDAP_GROUPS_OU}" "Groups" /tmp/groups-ou.ldif
+ensure_ou "${LDAP_AGENT_GROUPS_OU}" "AgentGroups" /tmp/agent-groups-ou.ldif
+ensure_ou "${LDAP_ROLES_OU}" "Roles" /tmp/roles-ou.ldif
+ensure_ou "${LDAP_AGENTS_OU}" "Ahenkler" /tmp/agents-ou.ldif
 
 echo "[ldap-init] Admin kullanıcısı kontrol ediliyor..."
 

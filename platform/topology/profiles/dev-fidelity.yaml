@@ -1,0 +1,32 @@
+name: dev-fidelity
+runtime_profile: dev-fidelity
+ldap_bind_mode: service-account
+seed_defaults:
+  operators:
+    count: 3
+    roles:
+      - platform-admin
+      - ops-operator
+      - policy-operator
+  directory_users:
+    count: 12
+    archetypes:
+      - standard
+      - privileged
+      - restricted
+      - shared
+  user_groups:
+    count: 4
+    archetypes:
+      - standard
+      - privileged
+      - restricted
+      - shared
+  endpoint_groups:
+    count: 3
+    archetypes:
+      - standard
+      - restricted
+      - privileged
+  policy_pack: baseline-standard
+  session_pack: login-basic

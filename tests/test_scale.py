@@ -20,7 +20,7 @@ def runner():
 @pytest.mark.scale
 def test_scale_scenario(runner):
     """scale_test senaryosu PASS olmalı."""
-    results = runner.run("orchestrator/scenarios/scale_test.yml")
+    results = runner.run("orchestrator/legacy_scenarios/scale_test.yml")
     assert results["passed"], f"scale_test başarısız: {results['steps']}"
 
 

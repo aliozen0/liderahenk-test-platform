@@ -98,6 +98,11 @@ CONTAINER_MODE="${CONTAINER_MODE:-1}"
 DEBUG_MODE="${DEBUG_MODE:-0}"
 AHENK_RUN_AS_ROOT="${AHENK_RUN_AS_ROOT:-1}"
 NETWORK_PORT_RULE_MODE="${NETWORK_PORT_RULE_MODE:-shadow}"
+LIDER_API_URL="${LIDER_API_URL:-http://liderapi:8080}"
+LIDERAPI_GATE_TIMEOUT_SECONDS="${LIDERAPI_GATE_TIMEOUT_SECONDS:-180}"
+LIDERAPI_GATE_INTERVAL_SECONDS="${LIDERAPI_GATE_INTERVAL_SECONDS:-5}"
+LIDERAPI_GATE_STABLE_SUCCESS_COUNT="${LIDERAPI_GATE_STABLE_SUCCESS_COUNT:-2}"
+AHENK_SKIP_LIDERAPI_GATE="${AHENK_SKIP_LIDERAPI_GATE:-0}"
 
 if [ -z "${AGENT_XMPP_PASS}" ]; then
   echo "[${AGENT_ID}] HATA: XMPP agent parolası boş"
@@ -113,6 +118,11 @@ export CONTAINER_MODE
 export DEBUG_MODE
 export AHENK_RUN_AS_ROOT
 export NETWORK_PORT_RULE_MODE
+export LIDER_API_URL
+export LIDERAPI_GATE_TIMEOUT_SECONDS
+export LIDERAPI_GATE_INTERVAL_SECONDS
+export LIDERAPI_GATE_STABLE_SUCCESS_COUNT
+export AHENK_SKIP_LIDERAPI_GATE
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="/opt/ahenk-patches:/app/ahenk/src${PYTHONPATH:+:${PYTHONPATH}}"
 
@@ -218,6 +228,11 @@ chown -R ahenk:ahenk /etc/ahenk /var/db /app/allowed-plugins /app /opt/ahenk-pat
 echo "[${AGENT_ID}] Başlatılıyor"
 echo "[${AGENT_ID}] Hostname kontratı: ${AGENT_HOSTNAME}"
 echo "[${AGENT_ID}] Plugin allowlist hazırlandı"
+
+if [ "${AHENK_SKIP_LIDERAPI_GATE}" != "1" ]; then
+  echo "[${AGENT_ID}] Lider API auth gate bekleniyor: ${LIDER_API_URL}"
+  python3 /opt/ahenk-patches/liderapi_gate.py
+fi
 
 run_agent() {
   if [ "${AHENK_RUN_AS_ROOT}" = "1" ]; then

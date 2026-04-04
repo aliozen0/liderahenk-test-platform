@@ -3,7 +3,7 @@
 LiderAhenk Test Senaryo Motoru — CLI Arayüzü
 ─────────────────────────────────────────────
 Kullanım:
-  python3 orchestrator/cli.py --scenario orchestrator/scenarios/basic_task.yml
+  python3 orchestrator/cli.py --scenario orchestrator/legacy_scenarios/basic_task.yml
   python3 orchestrator/cli.py --list
 """
 
@@ -27,9 +27,9 @@ def main():
     args = parser.parse_args()
 
     if args.list:
-        scenario_dir = Path("orchestrator/scenarios")
+        scenario_dir = Path("orchestrator/legacy_scenarios")
         if not scenario_dir.exists():
-            print("Senaryo dizini bulunamadı: orchestrator/scenarios/")
+            print("Senaryo dizini bulunamadı: orchestrator/legacy_scenarios/")
             sys.exit(1)
         scenarios = sorted(scenario_dir.glob("*.yml"))
         print("\nMevcut senaryolar:")

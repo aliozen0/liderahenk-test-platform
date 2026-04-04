@@ -19,6 +19,7 @@ from platform_runtime.runtime_db import RuntimeDbAdapter
 
 BASELINE_CONTRACT_PATH = Path("platform/contracts/baseline-registry.yaml")
 DEFAULT_BASELINE_DIR = Path("platform/baselines/golden-install")
+STOCK_CAPTURE_CONFIRMATION_FLAG = "--confirm-stock-source"
 
 
 def _utc_now() -> str:
@@ -246,7 +247,13 @@ def capture_golden_baseline(
     source_label: str | None = None,
     env_file: Path | None = None,
     force: bool = False,
+    confirm_stock_source: bool = False,
 ) -> dict[str, Any]:
+    if not confirm_stock_source:
+        raise RuntimeError(
+            "Refusing to capture canonical golden baseline without explicit stock-source confirmation. "
+            f"Re-run with {STOCK_CAPTURE_CONFIRMATION_FLAG} only against a verified stock LiderAhenk installation."
+        )
     apply_capture_environment(env_file)
     contract = _read_contract()
     baseline_root = root or DEFAULT_BASELINE_DIR
@@ -291,6 +298,7 @@ def validate_golden_baseline(root: Path | None = None) -> dict[str, Any]:
     baseline_root = root or DEFAULT_BASELINE_DIR
     errors: list[str] = []
     missing_files: list[str] = []
+    manifest_status = None
     for relative_path in _required_relative_paths(contract):
         target = baseline_root / relative_path
         if not target.exists():
@@ -318,7 +326,10 @@ def validate_golden_baseline(root: Path | None = None) -> dict[str, Any]:
             for field_name in contract["manifest_required_fields"]:
                 if field_name not in manifest:
                     errors.append(f"manifest missing field: {field_name}")
-            if manifest.get("status") != "capture-complete":
+            manifest_status = manifest.get("status")
+            if manifest_status == "capture-pending":
+                errors.append("canonical golden baseline not captured yet (manifest status: capture-pending)")
+            elif manifest_status != "capture-complete":
                 errors.append("manifest status must be capture-complete")
             capture_context = manifest.get("captureContext")
             if not isinstance(capture_context, dict):
@@ -361,9 +372,14 @@ def validate_golden_baseline(root: Path | None = None) -> dict[str, Any]:
             if "value" in payload:
                 errors.append(f"secret field exposed in plaintext: {secret_field}")
 
+    status = "pass"
+    if errors:
+        status = "pending-capture" if manifest_status == "capture-pending" else "fail"
     report = {
         "schemaVersion": 1,
         "baselineRoot": str(baseline_root),
+        "status": status,
+        "manifestStatus": manifest_status,
         "valid": not errors,
         "errors": errors,
         "checkedAt": _utc_now(),
@@ -718,5 +734,11 @@ def parse_capture_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--force",
         action="store_true",
         help="Allow overwriting an existing capture-complete baseline directory.",
+    )
+    parser.add_argument(
+        "--confirm-stock-source",
+        dest="confirm_stock_source",
+        action="store_true",
+        help="Acknowledge that the capture source is a verified stock LiderAhenk installation, not the patched dev runtime.",
     )
     return parser.parse_args(argv)
