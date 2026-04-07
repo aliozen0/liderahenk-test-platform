@@ -1,5 +1,5 @@
-# LiderAhenk Test Environment Makefile
-# Sessions 1-6: core + lider + agents + contracts + observability + orchestrator
+# LiderAhenk Test Platform — Makefile
+# Deterministic bootstrap via bootstrap_runtime.py · contract & acceptance testing
 
 include .env
 export
@@ -30,7 +30,7 @@ RELEASE_SCENARIO_PACKS ?= session-login-basic,ui-user-policy-roundtrip
 # Default agent scale
 N ?= $(shell grep AHENK_COUNT .env | cut -d= -f2)
 
-.PHONY: network-init network-check network-reset install-test-deps dev-core dev-lider dev-fast dev-fidelity dev dev-scale dev-obs dev-full build-lider build-agents build-platform build-obs stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token agents health quality-report test-integration test-scale test-runtime-core test-runtime-operational test-runtime-scale test-observability test-evidence test-evidence-isolated run-legacy-scenario test-e2e test-e2e-smoke test-e2e-management test-unit-gate test-acceptance-summary test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance validate-golden-baseline golden-baseline-status baseline-status golden-baseline-preflight capture-golden-baseline test-registration-parity diff-baseline validate-registration-evidence test-api test-api-quick test-api-data swagger
+.PHONY: network-init network-check network-reset install-test-deps dev-fast dev-fidelity stop stop-all clean clean-hard logs status test-contract test-contract-rest test-contract-ldap test-contract-xmpp token health quality-report test-scale test-runtime-core test-runtime-operational test-observability test-evidence test-evidence-isolated run-legacy-scenario test-e2e test-e2e-smoke test-e2e-management test-unit-gate test-acceptance-summary test-release-gate upstream-diff verify-candidate promote-candidate audit-platform test-acceptance validate-golden-baseline golden-baseline-status golden-baseline-preflight capture-golden-baseline test-registration-parity diff-baseline validate-registration-evidence test-api test-api-quick test-api-data swagger
 
 ## Create external Docker networks required by compose overlays
 network-init:
@@ -60,44 +60,6 @@ install-test-deps:
 	@echo "Installing Python test dependencies..."
 	python3 -m pip install --break-system-packages -r requirements-test.txt -q
 
-## Start core services (mariadb, ldap, ejabberd)
-dev-core:
-	@echo "Starting core services..."
-	@$(MAKE) network-init
-	$(COMPOSE_CMD) $(COMPOSE_CORE) -p $(PROJECT_NAME) up -d
-	@echo "Waiting for healthchecks..."
-	@sleep 5
-	$(COMPOSE_CMD) $(COMPOSE_CORE) -p $(PROJECT_NAME) ps
-
-## Build Lider images
-build-lider:
-	@echo "Building Lider images..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) build
-
-## Build agent images
-build-agents:
-	@echo "Building agent images..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_AGENTS) -p $(PROJECT_NAME) build
-
-## Build platform support images
-build-platform:
-	@echo "Building platform support images..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) build registration-orchestrator
-
-## Build observability images
-build-obs:
-	@echo "Building observability images..."
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_OBS) -p $(PROJECT_NAME) build ejabberd-exporter platform-exporter
-
-## Start core + Lider services
-dev-lider:
-	@echo "Starting core + Lider services..."
-	@$(MAKE) network-init
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) up -d
-	@echo "Waiting for healthchecks..."
-	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) -p $(PROJECT_NAME) ps
-
 ## Start the fast development profile
 dev-fast:
 	@echo "Starting dev-fast platform..."
@@ -109,18 +71,6 @@ dev-fidelity:
 	@echo "Starting dev-fidelity platform..."
 	@$(MAKE) network-init
 	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=dev-fidelity PYTHONPATH=. python3 platform/scripts/bootstrap_runtime.py --profile dev-fidelity --agents $(N) --project-name $(PROJECT_NAME)
-
-## Start all services (backward-compatible alias)
-dev:
-	@$(MAKE) dev-fast N=$(N)
-
-## Start scaled agents (usage: make dev-scale N=20)
-dev-scale:
-	@echo "Starting full platform with ahenk x$(N)..."
-	@$(MAKE) network-init
-	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=$(PLATFORM_RUNTIME_PROFILE) $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) up -d --scale ahenk=$(N)
-	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) -p $(PROJECT_NAME) ps
 
 ## Stop all services
 stop:
@@ -169,18 +119,6 @@ test-contract-ldap:
 test-contract-xmpp:
 	PYTHONPATH=. pytest tests/contracts/test_xmpp_contract.py -v --timeout=30
 
-## Start observability stack (core + lider + agent + obs)
-dev-obs:
-	@$(MAKE) dev-fidelity N=$(N)
-
-## Start full stack (core + lider + agent + obs + tracing)
-dev-full:
-	@echo "Starting full stack..."
-	@$(MAKE) network-init
-	AHENK_COUNT=$(N) PLATFORM_RUNTIME_PROFILE=dev-fidelity $(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) up -d --build --scale ahenk=$(N)
-	@sleep 10
-	$(COMPOSE_CMD) $(COMPOSE_CORE) $(COMPOSE_LIDER) $(COMPOSE_AGENTS) $(COMPOSE_PLATFORM) $(COMPOSE_OBS) $(COMPOSE_TRACING) -p $(PROJECT_NAME) ps
-
 ## Stop all services including observability + tracing
 stop-all:
 	@echo "Stopping full stack..."
@@ -195,12 +133,6 @@ token:
 	  -d '{"username":"$(LIDER_USER)","password":"$(LIDER_PASS)"}' | \
 	  python3 -c "import sys,json; print(json.load(sys.stdin)['token'])"
 
-## Agent list (authenticated)
-agents:
-	@TOKEN=$$(make token -s) && \
-	curl -s -H "Authorization: Bearer $$TOKEN" \
-	  http://localhost:8082/api/computers | python3 -m json.tool 2>/dev/null || echo "Endpoint is POST-based"
-
 ## Service health summary
 health:
 	@echo "=== liderapi ==="
@@ -213,12 +145,6 @@ health:
 	@ldapsearch -x -H ldap://localhost:1389 \
 	  -D "cn=$(LDAP_ADMIN_USERNAME),$(LDAP_BASE_DN)" -w $(LDAP_ADMIN_PASSWORD) \
 	  -b "ou=Ahenkler,$(LDAP_BASE_DN)" "(objectClass=device)" 2>/dev/null | grep "numEntries" || echo "unreachable"
-
-## Integration tests
-test-integration:
-	@echo "Running integration tests..."
-	@$(MAKE) install-test-deps
-	PYTHONPATH=. pytest tests/test_integration.py -v --timeout=60
 
 ## Scale tests
 test-scale:
@@ -262,11 +188,6 @@ test-runtime-operational:
 	python3 -m playwright install chromium
 	AHENK_COUNT=$(N) PYTHONPATH=. PLATFORM_RUNTIME_PROFILE=$(PROFILE) python3 platform/scripts/validate_runtime_operational.py
 
-## Run scale acceptance using the runtime-first target name
-test-runtime-scale:
-	@echo "Running runtime scale acceptance (N=$(N))..."
-	@$(MAKE) test-scale N=$(N)
-
 ## Validate the committed golden baseline registry
 validate-golden-baseline:
 	@echo "Validating golden baseline..."
@@ -279,8 +200,6 @@ golden-baseline-status:
 	@$(MAKE) install-test-deps
 	@echo "Baseline root: $(BASELINE_ROOT)"
 	PYTHONPATH=. python3 platform/scripts/golden_baseline_status.py $(BASELINE_ROOT)
-
-baseline-status: golden-baseline-status
 
 ## Validate stock baseline env and basic reachability before capture
 golden-baseline-preflight:
